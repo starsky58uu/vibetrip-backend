@@ -1,0 +1,76 @@
+version: '3.8'
+
+# VibeTrip 後端服務組合
+#
+# 三個 service 各司其職：
+# - api   → FastAPI (業務邏輯，所有請求入口)
+# - db    → PostgreSQL + PostGIS (靜態資料：帳號、站牌座標、足跡)
+# - redis → Redis (動態資料：即時到站、車輛數、外部 API 快取)
+
+services:
+  # ==========================================
+  # 後端 API
+  # ==========================================
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads           # 圖片上傳存放區
+    working_dir: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env                                # 敏感資訊從 .env 讀 (請複製 .env.example)
+    environment:
+      # 非敏感 / service 連線資訊維持在 compose
+      - DB_HOST=db
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DEBUG=true
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ==========================================
+  # 資料庫 (PostgreSQL + PostGIS)
+  # ==========================================
+  db:
+    image: postgis/postgis:15-3.3-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-tdx_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-your_secure_password}
+      POSTGRES_DB: ${DB_NAME:-tdx_database}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    # 不對外開 port，只允許 api 容器內網連線 — 生產環境更安全
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tdx_user} -d ${DB_NAME:-tdx_database}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ==========================================
+  # 快取 (Redis) — 動態資料
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_data:
+  uploads_data:
