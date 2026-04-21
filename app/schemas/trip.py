@@ -23,8 +23,10 @@ class TripItemResponse(BaseModel):
     time: str
     activity: str
     desc: str
-    icon: str
-    color: str
+    dur: str | None = None
+    tag: str | None = None
+    dist: str | None = None
+    mood: str | None = None
 
 
 class TripPlanResponse(BaseModel):
@@ -33,5 +35,6 @@ class TripPlanResponse(BaseModel):
     id: UUID
     vibe_key: str
     title: str
+    subtitle: str | None = None
     items: list[TripItemResponse]
     generated_at: datetime

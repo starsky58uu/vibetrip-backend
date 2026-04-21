@@ -139,6 +139,161 @@ docker compose exec db psql -U tdx_user -d tdx_database
 
 ---
 
+## API 測試守則（重要，避免浪費 AI 額度）
+
+### 基本觀念
+
+後端跑起來之後**不要隨便重啟 docker**。每次 `docker compose down` 或 `docker compose restart` 都會清掉 Redis 快取，下次打 AI 就要重新消耗 Gemini/Groq 額度。
+
+正確的測試流程：
+
+```
+docker compose up -d   ← 只啟動一次，之後保持在背景跑
+     ↓
+修改程式碼（docker 會自動 hot-reload，不需要重啟）
+     ↓
+用瀏覽器開 /docs 測試
+     ↓
+下班前 docker compose down（或直接讓它跑著）
+```
+
+---
+
+### 如何用 /docs（Swagger UI）測試
+
+1. 確認後端有在跑：瀏覽器開 `http://localhost:8000/docs`
+2. 找到要測試的端點，例如 `POST /api/v1/trips/recommend`
+3. 點 **Try it out**
+4. 在 Request body 貼入測試資料：
+   ```json
+   {
+     "vibe_key": "cafe",
+     "latitude": 25.0330,
+     "longitude": 121.5654
+   }
+   ```
+5. 點 **Execute**
+6. 看 Server response 的 Response body
+
+---
+
+### AI 行程端點測試守則
+
+#### Gemini 免費額度限制
+
+| 模型 | 每分鐘上限 | 每天上限 | 重置時間 |
+|---|---|---|---|
+| gemini-2.0-flash | 15 次 | 1,500 次 | 台灣時間早上 8:00 |
+| gemini-2.0-flash-lite | 30 次 | 1,500 次 | 台灣時間早上 8:00 |
+
+**每天 1,500 次聽起來很多，但：**
+- 每次 debug 重打就消耗一次
+- 每次 docker restart 快取清空，同樣的請求要重打
+- 全部模型共用同一個 project 的配額
+
+#### 正確測試步驟
+
+**第一次測試（確認 AI 有接上）：**
+
+```
+1. 打一次 POST /api/v1/trips/recommend
+2. 看 docker log 有沒有出現：
+   → [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/... "HTTP/1.1 200 OK"
+   → 代表 AI 成功回應
+3. 看 response body 有沒有真實地點名稱（不是「7-11」或「創意館」）
+```
+
+**確認快取有效（必做）：**
+
+```
+1. 用完全一樣的 vibe_key + latitude + longitude 再打一次
+2. 看 docker log：
+   → 不應該再出現 generativelanguage.googleapis.com 的 HTTP request
+   → 代表第二次直接從 Redis 回傳，沒有消耗 AI 額度
+3. 兩次 response 應該一模一樣
+```
+
+**查看 Redis 快取狀態：**
+
+```bash
+docker compose exec redis redis-cli
+> KEYS vibetrip:trip:ai:*          # 列出所有 AI 快取的 key
+> TTL vibetrip:trip:ai:cafe:25.03:121.57   # 看這筆還剩多少秒
+> GET vibetrip:trip:ai:cafe:25.03:121.57   # 看快取的 JSON 內容
+```
+
+**手動清除特定快取（不要用 FLUSHALL）：**
+
+```bash
+# 只清掉 AI 行程快取，其他快取（天氣、交通）保留
+docker compose exec redis redis-cli DEL vibetrip:trip:ai:cafe:25.03:121.57
+```
+
+---
+
+### 各端點測試範例
+
+#### 天氣（不消耗 AI 額度，可以盡量打）
+
+```json
+GET /api/v1/weather/current?lat=25.0330&lon=121.5654
+```
+
+#### AI 行程生成（節省額度：每個 vibe 只打一次）
+
+```json
+POST /api/v1/trips/recommend
+{
+  "vibe_key": "cafe",
+  "latitude": 25.0330,
+  "longitude": 121.5654
+}
+```
+
+vibe_key 可選值：`cafe` / `food` / `photo` / `walk` / `gift` / `rain` / `random`
+
+不同城市座標：
+- 台北大安區：`25.0330, 121.5654`
+- 台南中西區：`22.9999, 120.2269`
+- 高雄鹽埕區：`22.6248, 120.2850`
+- 花蓮市區：`23.9871, 121.6015`
+
+#### 附近地點搜尋（不消耗 AI 額度）
+
+```json
+GET /api/v1/places/search?query=咖啡&lat=25.0330&lon=121.5654
+```
+
+---
+
+### 額度用完怎麼辦
+
+**選項 A：等到隔天早上 8:00（UTC+8）重置**
+
+**選項 B：改用 Groq（額度更大）**
+
+1. 去 https://console.groq.com 申請免費 key
+2. 在 `.env` 加 `GROQ_API_KEY=你的key`
+3. 在 `app/services/ai_service.py` 把 `genai` 換成 `AsyncGroq`
+4. `docker compose up -d --build`（這次要 rebuild 因為有新套件）
+
+Groq 免費額度：每天 14,400 次，是 Gemini 的 10 倍。
+
+---
+
+### 什麼時候才需要 `docker compose up -d --build`
+
+只有以下情況才需要加 `--build`（重新打包 image）：
+
+| 情況 | 指令 |
+|---|---|
+| 改了 `requirements.txt`（加新套件）| `docker compose up -d --build` |
+| 第一次啟動 | `docker compose up -d --build` |
+| 改了 `.env` 裡的 key | `docker compose up -d` （不需要 build）|
+| 改了 Python 程式碼 | 什麼都不用做，uvicorn 自動 hot-reload |
+
+---
+
 ## 開發提示
 
 ### 加新 endpoint 的流程

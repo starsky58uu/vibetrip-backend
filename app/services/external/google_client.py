@@ -32,7 +32,7 @@ class GoogleMapsClient:
     async def _get(self, path: str, **params: Any) -> dict[str, Any]:
         resp = await self._http.get(
             f"{GOOGLE_BASE}{path}",
-            params={"key": settings.GOOGLE_API_KEY, "language": "zh-TW", **params},
+            params={"key": settings.GOOGLE_MAPS_API_KEY, "language": "zh-TW", **params},
         )
         resp.raise_for_status()
         return resp.json()
@@ -59,12 +59,13 @@ class GoogleMapsClient:
         query: str,
         lat: float | None = None,
         lon: float | None = None,
+        radius_meters: int = 5000,
     ) -> list[dict[str, Any]]:
         """文字搜尋，對應 AR 畫面的搜尋框。"""
         params: dict[str, Any] = {"query": query}
         if lat is not None and lon is not None:
             params["location"] = f"{lat},{lon}"
-            params["radius"] = 5000
+            params["radius"] = radius_meters
         data = await self._get("/place/textsearch/json", **params)
         return data.get("results", [])
 
@@ -76,14 +77,17 @@ class GoogleMapsClient:
         dest_lat: float,
         dest_lon: float,
         mode: str = "walking",
+        departure_time: int | None = None,  # Unix timestamp，transit 模式用來查當下班次
     ) -> dict[str, Any]:
         """
         mode: walking / transit / bicycling / driving
-        我們用 walking 得到步行路線、transit 得到公車/捷運換乘。
+        departure_time: Unix timestamp（秒），transit 模式傳入以查詢該時刻的實際班次
         """
-        return await self._get(
-            "/directions/json",
-            origin=f"{origin_lat},{origin_lon}",
-            destination=f"{dest_lat},{dest_lon}",
-            mode=mode,
-        )
+        params: dict[str, Any] = {
+            "origin": f"{origin_lat},{origin_lon}",
+            "destination": f"{dest_lat},{dest_lon}",
+            "mode": mode,
+        }
+        if departure_time is not None:
+            params["departure_time"] = departure_time
+        return await self._get("/directions/json", **params)

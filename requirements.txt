@@ -36,3 +36,5 @@ email-validator>=2.0.0            # 驗證 email 格式
 # ==========================================
 python-jose[cryptography]>=3.3.0  # JWT Token 簽發與驗證
 passlib[bcrypt]>=1.7.4            # 密碼雜湊 (bcrypt)
+
+groq>=0.9.0                  # Groq API 客戶端 (LLaMA 3.3, 免費額度 14400 次/天)

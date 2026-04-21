@@ -9,9 +9,13 @@
 
 未來想加「地理就近排序」或「時段過濾」時，就在這裡擴充。
 """
+import logging
 import random
+import uuid
 from datetime import datetime, timezone
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -20,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.trip import TripTemplate
 from app.schemas.trip import RecommendRequest, TripPlanResponse
 
+from app.services.ai_service import generate_trip
 
 # 下雨時，戶外類的 vibe 自動降級成「躲室內」
 RAINY_VIBE_FALLBACK = {"walk", "photo"}
@@ -30,34 +35,25 @@ async def recommend(db: AsyncSession, req: RecommendRequest) -> TripPlanResponse
 
     vibe = _resolve_vibe(req)
 
-    # 從 DB 撈符合的行程 (不包含使用者剛看過的)
-    stmt = select(TripTemplate).where(TripTemplate.vibe_key == vibe)
-    if req.exclude_trip_ids:
-        stmt = stmt.where(TripTemplate.id.not_in(req.exclude_trip_ids))
-
-    result = await db.execute(stmt)
-    candidates = result.scalars().all()
-
-    if not candidates:
-        # 排除剛看過的之後沒東西了 → 放寬條件重抽
-        result = await db.execute(select(TripTemplate).where(TripTemplate.vibe_key == vibe))
-        candidates = result.scalars().all()
-
-    if not candidates:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"找不到 vibe={vibe} 的行程",
+    try:
+        # 優先用 AI 生成
+        ai_result = await generate_trip(
+            vibe_key=vibe,
+            lat=req.latitude,
+            lon=req.longitude,
+            weather=req.weather_condition,
         )
-
-    chosen = random.choice(candidates)
-
-    return TripPlanResponse(
-        id=chosen.id,
-        vibe_key=chosen.vibe_key,
-        title=chosen.title,
-        items=chosen.items,                # Pydantic from_attributes 自動轉換
-        generated_at=datetime.now(timezone.utc),
-    )
+        return TripPlanResponse(
+            id=uuid.uuid4(),
+            vibe_key=vibe,
+            title=ai_result["title"],
+            subtitle=ai_result.get("subtitle", ""),
+            items=ai_result["items"],
+            generated_at=datetime.now(timezone.utc),
+        )
+    except Exception as e:
+        print(f"[AI ERROR] {type(e).__name__}: {e}", flush=True)
+        return await _recommend_from_db(db, vibe, req.exclude_trip_ids)
 
 
 async def get_trip(db: AsyncSession, trip_id: UUID) -> TripPlanResponse:
@@ -91,3 +87,23 @@ def _resolve_vibe(req: RecommendRequest) -> str:
         return "rain"
 
     return req.vibe_key
+
+async def _recommend_from_db(db, vibe, exclude_ids):
+    stmt = select(TripTemplate).where(TripTemplate.vibe_key == vibe)
+    if exclude_ids:
+        stmt = stmt.where(TripTemplate.id.not_in(exclude_ids))
+    result = await db.execute(stmt)
+    candidates = result.scalars().all()
+    if not candidates:
+        result = await db.execute(select(TripTemplate).where(TripTemplate.vibe_key == vibe))
+        candidates = result.scalars().all()
+    if not candidates:
+        raise HTTPException(status_code=404, detail=f"找不到 vibe={vibe} 的行程")
+    chosen = random.choice(candidates)
+    return TripPlanResponse(
+        id=chosen.id,
+        vibe_key=chosen.vibe_key,
+        title=chosen.title,
+        items=chosen.items,
+        generated_at=datetime.now(timezone.utc),
+    )

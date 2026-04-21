@@ -60,7 +60,10 @@ class Settings(BaseSettings):
     OPENWEATHER_API_KEY: str = ""
 
     # Google Maps — Places / Directions
-    GOOGLE_API_KEY: str = ""
+    GOOGLE_MAPS_API_KEY: str = ""
+
+    # Groq — 生成式 AI (LLaMA 3.3，免費額度比 Gemini 大 10 倍)
+    GROQ_API_KEY: str = ""
 
     # ---------- 檔案上傳 ----------
     UPLOAD_DIR: str = "/app/uploads"                # 容器內路徑

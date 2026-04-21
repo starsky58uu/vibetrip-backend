@@ -1,5 +1,3 @@
-version: '3.8'
-
 # VibeTrip 後端服務組合
 #
 # 三個 service 各司其職：
