@@ -69,6 +69,23 @@ class GoogleMapsClient:
         data = await self._get("/place/textsearch/json", **params)
         return data.get("results", [])
 
+    async def place_details(
+        self,
+        place_id: str,
+        fields: str = "opening_hours",
+    ) -> dict[str, Any]:
+        """
+        取得單一地點的詳細資訊。
+        fields 預設只拿 opening_hours（含 periods）以節省費用。
+        其他常用 fields：name, formatted_address, rating, geometry
+        """
+        data = await self._get(
+            "/place/details/json",
+            place_id=place_id,
+            fields=fields,
+        )
+        return data.get("result", {})
+
     # ---------- Directions ----------
     async def directions(
         self,

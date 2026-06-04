@@ -67,6 +67,15 @@ async def delete_personal(
 # ==========================================================================
 # 社群地標 (可匿名瀏覽，互動需登入)
 # ==========================================================================
+@router.get("/saved", response_model=list[CommunitySpotResponse])
+async def list_saved(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[CommunitySpotResponse]:
+    """列出目前使用者收藏的社群地標。"""
+    return await spot_service.list_saved_spots(db, user)
+
+
 @router.get("/community", response_model=list[CommunitySpotResponse])
 async def list_community(
     db: Annotated[AsyncSession, Depends(get_db)],
