@@ -6,7 +6,7 @@
 """
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,25 @@ from app.services import transit_service
 from app.services.external.google_client import GoogleMapsClient
 
 router = APIRouter()
+
+
+@router.get("/raw", summary="原始 Google Directions 路線（供 AR 逐步導航）")
+async def raw_directions(
+    olat: Annotated[float, Query(ge=-90, le=90)],
+    olng: Annotated[float, Query(ge=-180, le=180)],
+    dlat: Annotated[float, Query(ge=-90, le=90)],
+    dlng: Annotated[float, Query(ge=-180, le=180)],
+    mode: str = "walking",
+) -> dict:
+    """
+    代理 Google Directions，回傳完整原始路線（含 steps / maneuver /
+    end_location / distance），讓前端 AR 逐步導航沿用原本的解析邏輯，
+    且金鑰只留在後端，不外流到 App。
+    """
+    async with GoogleMapsClient() as g:
+        raw = await g.directions(olat, olng, dlat, dlng, mode=mode)
+    routes = raw.get("routes", [])
+    return {"routes": routes[:1]}   # 只回第一條，保持與 Google 原始結構相容
 
 
 @router.post("/calculate", response_model=DirectionsResponse)

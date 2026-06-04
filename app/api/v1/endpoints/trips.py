@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.redis_client import get_redis
 from app.schemas.trip import RecommendRequest, TripPlanResponse
 from app.services import trip_service
 
@@ -31,3 +32,16 @@ async def get_trip(
 ) -> TripPlanResponse:
     """取單一行程 — 供分享 / 歷史查詢。"""
     return await trip_service.get_trip(db, trip_id)
+
+
+@router.delete("/cache", summary="清除行程 AI 快取（開發用）")
+async def clear_trip_cache() -> dict:
+    """
+    清除所有 vibetrip:trip:ai:* 快取。
+    改了 AI prompt 或 places 邏輯後，用這支強制讓下次請求重新生成。
+    """
+    redis = await get_redis()
+    keys = await redis.keys("vibetrip:trip:ai:*")
+    if keys:
+        await redis.delete(*keys)
+    return {"deleted": len(keys), "message": f"已清除 {len(keys)} 筆行程快取"}

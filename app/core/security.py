@@ -8,26 +8,25 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 from uuid import UUID
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
 
 # ---------- 密碼雜湊 ----------
-# schemes=["bcrypt"]：bcrypt 是目前主流、安全的密碼雜湊演算法
-# deprecated="auto"：舊雜湊值若遇到會自動標記為過期 (供未來升級用)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(plain: str) -> str:
     """把明文密碼轉成 bcrypt 雜湊，只在 register 時用。"""
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """比對明文密碼與 DB 裡的雜湊，登入時用。"""
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
+    except Exception:
+        return False
 
 
 # ---------- JWT ----------

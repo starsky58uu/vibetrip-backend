@@ -42,6 +42,7 @@ async def recommend(db: AsyncSession, req: RecommendRequest) -> TripPlanResponse
             lat=req.latitude,
             lon=req.longitude,
             weather=req.weather_condition,
+            exclude_trip_ids=req.exclude_trip_ids or None,
         )
         return TripPlanResponse(
             id=uuid.uuid4(),

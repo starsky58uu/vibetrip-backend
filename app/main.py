@@ -7,9 +7,12 @@ VibeTrip API 進入點。
 3. shutdown 時：關 Redis
 """
 import logging
+import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.api_router import api_router
 from app.core.config import settings
@@ -29,6 +32,12 @@ app = FastAPI(
     description="專為 P 型旅人打造的即時盲盒行程 App 後端 API",
     version="1.0.0",
 )
+
+# ── 靜態圖片服務 ─────────────────────────────────────────────────────────────
+# 讓 /static/uploads/<filename> 可直接存取已上傳的足跡圖片
+_upload_dir = Path(settings.UPLOAD_DIR)
+_upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/uploads", StaticFiles(directory=str(_upload_dir)), name="static_uploads")
 
 # ---------- CORS ----------
 # 開發階段允許所有來源，上線務必改成 App 的實際網域 (或用環境變數控制)

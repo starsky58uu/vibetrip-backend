@@ -11,8 +11,10 @@ from app.api.v1.endpoints import (
     directions,
     places,
     spots,
+    taste,
     transit,
     trips,
+    uploads,
     users,
     weather,
 )
@@ -38,3 +40,9 @@ api_router.include_router(directions.router, prefix="/directions", tags=["路線
 
 # ---------- 足跡 ----------
 api_router.include_router(spots.router, prefix="/spots", tags=["足跡"])
+
+# ---------- 上傳 ----------
+api_router.include_router(uploads.router, prefix="/uploads", tags=["上傳"])
+
+# ---------- AI 口味分析 ----------
+api_router.include_router(taste.router, prefix="/taste", tags=["口味分析"])

@@ -216,6 +216,45 @@ async def list_community_spots(
     ]
 
 
+async def list_saved_spots(db: AsyncSession, viewer: User) -> list[CommunitySpotResponse]:
+    """列出使用者收藏的社群地標。"""
+    query = """
+        SELECT
+            cs.id, cs.content, cs.image_url, cs.likes_count, cs.saves_count, cs.created_at,
+            ST_Y(cs.location::geometry) AS lat,
+            ST_X(cs.location::geometry) AS lon,
+            u.id AS author_id, u.username, u.display_name, u.avatar_url,
+            CASE WHEN sl.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS is_liked
+        FROM spot_saves ss
+        JOIN community_spots cs ON cs.id = ss.spot_id
+        JOIN users u ON u.id = cs.author_id
+        LEFT JOIN spot_likes sl ON sl.spot_id = cs.id AND sl.user_id = :viewer_id
+        WHERE ss.user_id = :viewer_id
+        ORDER BY cs.created_at DESC
+    """
+    rows = (await db.execute(text(query), {"viewer_id": viewer.id})).mappings().all()
+    return [
+        CommunitySpotResponse(
+            id=r["id"],
+            author=SpotAuthor(
+                id=r["author_id"],
+                username=r["username"],
+                display_name=r["display_name"],
+                avatar_url=r["avatar_url"],
+            ),
+            latitude=r["lat"],
+            longitude=r["lon"],
+            content=r["content"],
+            image_url=r["image_url"],
+            likes_count=r["likes_count"],
+            saves_count=r["saves_count"],
+            created_at=r["created_at"],
+            viewer_state=ViewerState(is_liked=r["is_liked"], is_saved=True),
+        )
+        for r in rows
+    ]
+
+
 async def toggle_like(db: AsyncSession, user: User, spot_id: UUID) -> ToggleLikeResponse:
     """按讚 / 取消讚 (toggle 語義)。"""
     spot = await db.get(CommunitySpot, spot_id)
