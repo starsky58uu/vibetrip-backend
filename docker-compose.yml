@@ -12,8 +12,9 @@ services:
   api:
     build: .
     restart: unless-stopped
+    # 只綁本機 loopback，區網其他裝置無法連 8000；tunnel 仍經 Docker network 連 api:8000
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - .:/app
       - uploads_data:/app/uploads           # 圖片上傳存放區
@@ -33,6 +34,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - backend
 
   # ==========================================
   # 資料庫 (PostgreSQL + PostGIS)
@@ -52,6 +55,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - backend
 
   # ==========================================
   # 快取 (Redis) — 動態資料
@@ -67,6 +72,35 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - backend
+
+  # ==========================================
+  # Cloudflare Tunnel（可選，對外暴露 API）
+  # 啟動：docker compose --profile tunnel up -d
+  # 設定說明：docs/CLOUDFLARE_TUNNEL.md
+  # ==========================================
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    # Token 模式（建議）：在 .env 設定 CLOUDFLARE_TUNNEL_TOKEN，路由在 Zero Trust 設定
+    # Config 模式：改為下方註解那行，並準備 cloudflared/config.yml + credentials.json
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    # command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    env_file:
+      - .env
+    depends_on:
+      - api
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
 
 volumes:
   pg_data:

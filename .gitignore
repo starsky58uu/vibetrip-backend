@@ -23,6 +23,10 @@ pg_data/
 # --- 專案特定檔案 ---
 uploads/       # 擋掉測試上傳的圖檔或文件
 
+# --- Cloudflare Tunnel 機密 ---
+cloudflared/credentials.json
+cloudflared/config.yml
+
 # --- 開發工具與 OS 設定 ---
 .vscode/
 .idea/

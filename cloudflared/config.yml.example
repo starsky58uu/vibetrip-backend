@@ -1,0 +1,22 @@
+# Cloudflare Tunnel 設定範例
+#
+# 使用方式（命名 tunnel，不用 dashboard token 時）：
+#   1. cloudflared tunnel login
+#   2. cloudflared tunnel create vibetrip-api
+#   3. 複製產生的 credentials JSON 到 cloudflared/credentials.json
+#   4. cp cloudflared/config.yml.example cloudflared/config.yml
+#   5. 把 tunnel: 改成你的 tunnel UUID，hostname 改成你的網域
+#   6. docker compose --profile tunnel up -d
+#
+# 若用 CLOUDFLARE_TUNNEL_TOKEN（Zero Trust 建立 tunnel 時複製），
+# 在 dashboard 設定 Public Hostname 即可，不必使用本檔。
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # 你的 API 網域 → 轉發到 compose 內的 api service
+  - hostname: api.example.com
+    service: http://api:8000
+  # 必須保留：未匹配的請求回 404
+  - service: http_status:404

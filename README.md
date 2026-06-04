@@ -103,6 +103,16 @@ docker compose up --build
 
 瀏覽器打開 <http://localhost:8000/docs>，可以直接試所有端點。
 
+### 4. 透過 Cloudflare Tunnel 對外（可選）
+
+不需開路由器 port，用 Cloudflare 把 API 公開到例如 `https://api.yourdomain.com`。
+
+完整步驟見 **[docs/CLOUDFLARE_TUNNEL.md](docs/CLOUDFLARE_TUNNEL.md)**。摘要：
+
+1. 在 Cloudflare Zero Trust 建立 Tunnel，複製 token 到 `.env` 的 `CLOUDFLARE_TUNNEL_TOKEN`
+2. Public Hostname 指向 **`http://api:8000`**（不是 localhost）
+3. 啟動：`docker compose --profile tunnel up -d`
+
 ---
 
 ## 常見操作
