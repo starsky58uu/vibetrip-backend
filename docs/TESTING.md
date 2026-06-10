@@ -77,7 +77,7 @@ pytest tests/unit/test_security.py -v   # 單一檔案
 pytest -k "rainy" -v              # 名稱關鍵字過濾
 ```
 
-### 覆蓋率（CI 強制 ≥48%）
+### 覆蓋率（CI 強制 100%）
 
 ```bash
 pytest --cov=app --cov-report=term-missing

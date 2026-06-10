@@ -16,7 +16,7 @@ markers = [
 source = ["app"]
 
 [tool.coverage.report]
-fail_under = 48
+fail_under = 100
 show_missing = true
 
 [tool.ruff]

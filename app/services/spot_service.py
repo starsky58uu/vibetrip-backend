@@ -6,6 +6,7 @@
 - 按讚 / 收藏：`INSERT ON CONFLICT` + 原子 `UPDATE` 計數
 """
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -32,6 +33,12 @@ from app.schemas.spot import (
 
 def _point(lon: float, lat: float):
     return func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326).cast(type_=PersonalSpot.location.type)
+
+
+def _cursor_datetime(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(value)
 
 
 async def _coords_for_spot(db: AsyncSession, spot_id: UUID) -> tuple[float, float]:
@@ -222,12 +229,12 @@ async def list_community_spots(
             c = decode_cursor(cursor)
             cursor_filter = (
                 "AND (cs.likes_count, cs.created_at, cs.id) < "
-                "(:c_likes, :c_created_at::timestamptz, :c_id::uuid)"
+                "(:c_likes, CAST(:c_created_at AS timestamptz), CAST(:c_id AS uuid))"
             )
             params.update(
                 {
                     "c_likes": c["likes_count"],
-                    "c_created_at": c["created_at"],
+                    "c_created_at": _cursor_datetime(c["created_at"]),
                     "c_id": c["id"],
                 }
             )
@@ -237,10 +244,10 @@ async def list_community_spots(
         dist_select = (
             ", cs.location <-> ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography AS dist_m"
         )
-        order_clause = "ORDER BY dist_m ASC, cs.id ASC"
+        order_clause = "ORDER BY dist_m ASC, id ASC"
         if cursor:
             c = decode_cursor(cursor)
-            cursor_filter = "AND (dist_m, id) > (:c_dist_m, :c_id::uuid)"
+            cursor_filter = "AND (dist_m, id) > (:c_dist_m, CAST(:c_id AS uuid))"
             params.update({"c_dist_m": c["dist_m"], "c_id": c["id"]})
         inner_query = f"""
         SELECT
@@ -277,8 +284,11 @@ async def list_community_spots(
         order_clause = "ORDER BY cs.created_at DESC, cs.id DESC"
         if cursor:
             c = decode_cursor(cursor)
-            cursor_filter = "AND (cs.created_at, cs.id) < (:c_created_at::timestamptz, :c_id::uuid)"
-            params.update({"c_created_at": c["created_at"], "c_id": c["id"]})
+            cursor_filter = (
+                "AND (cs.created_at, cs.id) < "
+                "(CAST(:c_created_at AS timestamptz), CAST(:c_id AS uuid))"
+            )
+            params.update({"c_created_at": _cursor_datetime(c["created_at"]), "c_id": c["id"]})
 
     query = f"""
         SELECT
@@ -312,8 +322,6 @@ async def list_community_spots(
                     "id": str(last["id"]),
                 }
             )
-        elif sort == "nearby":
-            next_cursor = encode_cursor({"dist_m": last["dist_m"], "id": str(last["id"])})
         else:
             next_cursor = encode_cursor({"created_at": last["created_at"], "id": str(last["id"])})
 

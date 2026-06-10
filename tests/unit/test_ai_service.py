@@ -23,6 +23,38 @@ def test_replaces_hallucinated_place() -> None:
     assert out[0]["activity"] in {p["name"] for p in NEARBY}
 
 
+def test_partial_name_match() -> None:
+    items = [{"activity": "路易莎", "desc": "縮寫"}]
+    out = _validate_activities(items, NEARBY)
+    assert out[0]["activity"] == "路易莎咖啡"
+
+
+def test_empty_nearby_passthrough() -> None:
+    items = [{"activity": "任意", "desc": "x"}]
+    assert _validate_activities(items, []) == items
+
+
+def test_duplicate_uses_next_highest_rated() -> None:
+    items = [
+        {"activity": "路易莎咖啡", "desc": "1"},
+        {"activity": "路易莎咖啡", "desc": "2"},
+    ]
+    out = _validate_activities(items, NEARBY)
+    names = [x["activity"] for x in out]
+    assert len(names) == len(set(names))
+
+
+def test_drops_station_when_candidates_exhausted() -> None:
+    only = [{"name": "唯一店", "rating": 4.0}]
+    items = [
+        {"activity": "唯一店", "desc": "1"},
+        {"activity": "唯一店", "desc": "2"},
+        {"activity": "假店", "desc": "3"},
+    ]
+    out = _validate_activities(items, only)
+    assert len(out) <= 2
+
+
 def test_drops_duplicate_when_no_fallback_left() -> None:
     items = [
         {"activity": "路易莎咖啡", "desc": "第一站"},

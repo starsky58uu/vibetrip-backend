@@ -36,7 +36,7 @@
 - [x] API smoke tests（root、healthz，mock 依賴）
 - [x] CI 跑 pytest
 - [x] [docs/TESTING.md](TESTING.md) — 測試政策（新功能必附測試、給 LLM 的指引）
-- [x] CI 覆蓋率門檻（`pytest-cov` + `--cov-fail-under=48`）
+- [x] CI 覆蓋率門檻（`pytest-cov` + `fail_under=100` in pyproject.toml）
 - [x] 整合測試（CI 用 PostgreSQL + Redis service containers）
 - [x] Alembic migrations（見 [MIGRATIONS.md](MIGRATIONS.md)）
 - [x] 拆分 `ai_service.py` → `app/services/ai/`
