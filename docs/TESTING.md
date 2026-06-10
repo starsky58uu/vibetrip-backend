@@ -64,7 +64,7 @@ pytest -v
 
 ```bash
 docker compose run --rm -e DEBUG=true -e JWT_SECRET_KEY=pytest-ci-secret-key api \
-  sh -c "pip install pytest pytest-asyncio -q && python -m pytest -v"
+  sh -c "pip install -r requirements-dev.txt -q && python -m pytest -v"
 ```
 
 ### 常用指令

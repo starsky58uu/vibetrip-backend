@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.core.config import settings
 from app.core.deps import get_current_user
+from app.core.rate_limit import rate_limit_upload_image
 from app.db.models.user import User
 from app.schemas.common import UploadResponse
 
@@ -21,7 +22,7 @@ _MAX_BYTES = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 async def upload_image(
     request: Request,
     file: Annotated[UploadFile, File(...)],
-    _user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_current_user)],
 ) -> UploadResponse:
     """
     上傳單張圖片（multipart/form-data），回傳可公開存取的 image_url。
@@ -29,7 +30,9 @@ async def upload_image(
     - 支援格式：JPEG / PNG / WebP / HEIC
     - 大小上限：MAX_UPLOAD_SIZE_MB（預設 10MB）
     - 認證：需要 Bearer token
+    - 限流：每使用者每小時 RATE_LIMIT_UPLOADS_PER_HOUR 次（預設 30）
     """
+    await rate_limit_upload_image(str(user.id))
     # ── 格式檢查 ─────────────────────────────────────────────────────────────
     content_type = (file.content_type or "").split(";")[0].strip().lower()
     if content_type not in _ALLOWED_MIME:

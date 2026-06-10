@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.rate_limit import rate_limit_trips_recommend
 from app.core.redis_client import get_redis, scan_delete_pattern
 from app.db.models.user import User
 from app.schemas.trip import RecommendRequest, TripPlanResponse
@@ -21,10 +22,13 @@ router = APIRouter()
 async def recommend_trip(
     req: RecommendRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[None, Depends(rate_limit_trips_recommend)],
 ) -> TripPlanResponse:
     """
     依心情 / 位置 / 天氣產生一份盲盒行程。
+
     每次呼叫都會隨機挑一個 — 前端「搖一搖」功能就是再打一次這支。
+    限流：每 IP 每分鐘 RATE_LIMIT_TRIPS_PER_MINUTE 次（預設 15）。
     """
     return await trip_service.recommend(db, req)
 

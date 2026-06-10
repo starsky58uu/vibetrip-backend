@@ -40,7 +40,7 @@
 - [ ] 整合測試（需 Docker DB/Redis）
 - [x] Alembic migrations（見 [MIGRATIONS.md](MIGRATIONS.md)）
 - [ ] 拆分 `ai_service.py`
-- [ ] Rate limiting（`/trips/recommend`、`/uploads/image`）
+- [x] Rate limiting（`/trips/recommend`、`/uploads/image` — Redis 固定視窗）
 - [ ] 社群 feed 分頁
 - [ ] Refresh token rotation
 - [ ] AI 行程持久化或明確文件化 `GET /trips/{id}` 限制

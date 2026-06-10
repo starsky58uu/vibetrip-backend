@@ -17,6 +17,7 @@ from httpx import ASGITransport, AsyncClient
 # 必須在 import app 模組之前
 os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("JWT_SECRET_KEY", "pytest-secret-key-not-for-production")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 from app.core.config import get_settings
 

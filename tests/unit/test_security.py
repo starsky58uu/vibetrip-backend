@@ -35,6 +35,7 @@ def test_refresh_token_rejects_access_type() -> None:
 def test_tampered_token_raises() -> None:
     user_id = uuid4()
     token = create_token(user_id, token_type="access")
-    bad = token[:-1] + ("a" if token[-1] != "a" else "b")
+    header, payload, _sig = token.split(".")
+    bad = f"{header}.{payload}.invalidsignature"
     with pytest.raises(JWTError):
         decode_token(bad, expected_type="access")

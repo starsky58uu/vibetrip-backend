@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 10
     PUBLIC_CDN_BASE: str = "http://localhost:8000/static/uploads"
 
+    # ---------- Rate limiting（Redis 固定視窗）----------
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_TRIPS_PER_MINUTE: int = 15  # POST /trips/recommend，每 IP
+    RATE_LIMIT_UPLOADS_PER_HOUR: int = 30  # POST /uploads/image，每使用者
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
