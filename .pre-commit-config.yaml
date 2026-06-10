@@ -1,0 +1,15 @@
+# 安裝：pip install -r requirements-dev.txt && pre-commit install
+# 手動跑全部：pre-commit run --all-files
+# 見 docs/CONVENTIONS.md §12
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        name: ruff lint
+        args: [--fix]
+        files: ^(app/|seed_spots\.py)
+      - id: ruff-format
+        name: ruff format
+        files: ^(app/|seed_spots\.py)

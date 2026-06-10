@@ -164,4 +164,14 @@ python -m ruff format app seed_spots.py
 
 PR 推送時 GitHub Actions（`.github/workflows/lint.yml`）會自動跑。
 
-**養成習慣**：改完 code、commit 前跑一遍 `ruff check --fix && ruff format`。
+### pre-commit（建議，commit 前自動跑）
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install          # 只需做一次，裝在 .git/hooks/pre-commit
+pre-commit run --all-files  # 手動掃描整個 repo
+```
+
+之後每次 `git commit`，Ruff 會自動 lint + format；有修正時會改檔並中止 commit，你 `git add` 後再 commit 一次即可。
+
+若暫時要跳過（不建議）：`git commit --no-verify`

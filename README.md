@@ -112,11 +112,11 @@ docker compose up --build
 
 ```bash
 pip install -r requirements-dev.txt
-python -m ruff check app seed_spots.py --fix   # lint
-python -m ruff format app seed_spots.py        # 排版
+pre-commit install                             # 一次設定，之後 commit 前自動跑
+pre-commit run --all-files                     # 或手動掃描
 ```
 
-規則見 [docs/CONVENTIONS.md](docs/CONVENTIONS.md)。推送 PR 時 GitHub Actions 會自動跑。
+規則見 [docs/CONVENTIONS.md](docs/CONVENTIONS.md)。推送 PR 時 GitHub Actions 也會跑。
 
 ### 4. 透過 Cloudflare Tunnel 對外（可選）
 
