@@ -118,6 +118,17 @@ pre-commit run --all-files                     # 或手動掃描
 
 規則見 [docs/CONVENTIONS.md](docs/CONVENTIONS.md)。推送 PR 時 GitHub Actions 也會跑。
 
+```bash
+pytest -v   # 需 Python 3.11+（見 pyproject.toml）
+
+# 或在本機沒有 3.11 時，用 Docker（在 vibetrip-backend 目錄）：
+docker compose run --rm -e DEBUG=true -e JWT_SECRET_KEY=pytest-ci-secret-key api sh -c "pip install pytest pytest-asyncio -q && python -m pytest -v"
+```
+
+**新功能必附測試** → [docs/TESTING.md](docs/TESTING.md)（含 AI 助手須知、PR 檢查清單）
+
+改進路線圖：[docs/ROADMAP.md](docs/ROADMAP.md)。
+
 ### 4. 透過 Cloudflare Tunnel 對外（可選）
 
 不需開路由器 port，用 Cloudflare 把 API 公開到例如 `https://api.yourdomain.com`。

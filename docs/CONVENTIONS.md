@@ -129,7 +129,9 @@ async def list_community(...) -> list[CommunitySpotResponse]:
 ## 10. 新增功能檢查清單
 
 - [ ] Pydantic schema（request + response）
-- [ ] Service 函式 + 單元測試（理想上）
+- [ ] Service 函式（可單獨測試的純邏輯）
+- [ ] **測試** — `tests/unit/` 或 `tests/api/`（**必填**，見 [TESTING.md](TESTING.md)）
+- [ ] `pytest -v` 全綠
 - [ ] Endpoint 薄包裝 + `response_model`
 - [ ] 若打外部 API → `external/` client + service 層快取
 - [ ] 更新 `docs/API.md` 一筆
@@ -162,7 +164,7 @@ python -m ruff check app seed_spots.py --fix
 python -m ruff format app seed_spots.py
 ```
 
-PR 推送時 GitHub Actions（`.github/workflows/lint.yml`）會自動跑。
+PR 推送時 GitHub Actions（`.github/workflows/ci.yml`）會自動跑。
 
 ### pre-commit（建議，commit 前自動跑）
 
@@ -175,3 +177,25 @@ pre-commit run --all-files  # 手動掃描整個 repo
 之後每次 `git commit`，Ruff 會自動 lint + format；有修正時會改檔並中止 commit，你 `git add` 後再 commit 一次即可。
 
 若暫時要跳過（不建議）：`git commit --no-verify`
+
+---
+
+## 13. 測試（pytest）— 新功能必附測試
+
+**政策**：每次新增或修改後端行為，都要在 `tests/` 補上案例並跑過 `pytest -v`。  
+完整說明（含 AI 助手須知、覆蓋率、PR 檢查清單）→ **[docs/TESTING.md](TESTING.md)**
+
+```bash
+pip install -r requirements-dev.txt
+pytest -v                    # 合併前必跑
+pytest tests/unit -v         # 快速：不需 Docker
+```
+
+| 目錄 | 內容 |
+|------|------|
+| `tests/unit/` | 純邏輯：JWT、vibe 解析、公車 ETA、AI 防幻覺 |
+| `tests/api/` | HTTP smoke：`/`、`/healthz`（mock DB/Redis） |
+
+CI（`.github/workflows/ci.yml`）會自動跑 pytest；本地全綠再 push。
+
+進度與待辦（整合測試、覆蓋率門檻）→ [docs/ROADMAP.md](ROADMAP.md)。

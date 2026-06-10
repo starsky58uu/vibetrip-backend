@@ -9,7 +9,7 @@ repos:
       - id: ruff
         name: ruff lint
         args: [--fix]
-        files: ^(app/|seed_spots\.py)
+        files: ^(app/|seed_spots\.py|tests/)
       - id: ruff-format
         name: ruff format
-        files: ^(app/|seed_spots\.py)
+        files: ^(app/|seed_spots\.py|tests/)
