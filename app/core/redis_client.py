@@ -8,18 +8,18 @@ Redis 連線管理 — 負責「動態資料」的快取。
 
 所有 key 都經過 build_key() 加上 namespace 前綴，避免跟其他專案打架。
 """
+
 import json
-from typing import Any, Optional
+from typing import Any
 
 import redis.asyncio as redis
 
 from app.core.config import settings
 
-
 # ---------- 全域 client ----------
 # 整個 App 共用同一個 connection pool，由 redis-py 內部管理
 # decode_responses=True：讓 get/set 直接用 str，不用每次自己 decode
-_redis_client: Optional[redis.Redis] = None
+_redis_client: redis.Redis | None = None
 
 
 async def get_redis() -> redis.Redis:
@@ -59,7 +59,7 @@ def build_key(*parts: Any) -> str:
     return ":".join([NAMESPACE, *[str(p) for p in parts]])
 
 
-async def cache_get_json(client: redis.Redis, key: str) -> Optional[Any]:
+async def cache_get_json(client: redis.Redis, key: str) -> Any | None:
     """讀 key，如果有就反序列化成 Python 物件 (dict/list/...)。"""
     raw = await client.get(key)
     if raw is None:
@@ -75,3 +75,15 @@ async def cache_set_json(
 ) -> None:
     """序列化成 JSON 存進 redis，並設過期時間 (TTL)。"""
     await client.set(key, json.dumps(value, ensure_ascii=False), ex=ttl_seconds)
+
+
+async def scan_delete_pattern(client: redis.Redis, pattern: str) -> int:
+    """
+    用 SCAN 刪除符合 pattern 的 key（避免 KEYS 阻塞 Redis）。
+    回傳刪除筆數。
+    """
+    deleted = 0
+    async for key in client.scan_iter(match=pattern, count=100):
+        await client.delete(key)
+        deleted += 1
+    return deleted

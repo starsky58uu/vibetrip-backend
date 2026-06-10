@@ -1,4 +1,5 @@
 """認證服務層 — register / login / refresh。"""
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +71,7 @@ async def refresh_access_token(db: AsyncSession, req: RefreshRequest) -> AccessT
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token 無效或已過期",
-        )
+        ) from None
 
     # 確認使用者還存在
     user = await db.get(User, user_id)

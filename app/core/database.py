@@ -8,7 +8,8 @@ PostgreSQL 連線管理 — 負責存放「靜態資料」。
 
 用 async SQLAlchemy 2.0，所有 ORM 操作都是 await。
 """
-from typing import AsyncGenerator
+
+from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -17,7 +18,6 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
-
 
 # ---------- 建立引擎 ----------
 # pool_pre_ping=True：每次拿連線前先 ping 一下，避免連到已斷掉的 socket

@@ -9,6 +9,7 @@ TDX (交通部 PTX/TDX) client — 負責從 TDX 平台撈公車/捷運/YouBike 
 
 docs: https://tdx.transportdata.tw/api-service/swagger
 """
+
 import time
 from typing import Any
 
@@ -16,7 +17,6 @@ import httpx
 
 from app.core.config import settings
 from app.core.redis_client import build_key, cache_get_json, cache_set_json, get_redis
-
 
 # TDX 認證與 API endpoint
 TDX_AUTH_URL = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
@@ -126,7 +126,7 @@ class TDXClient:
     async def get_mrt_eta(self, station_id: str) -> list[dict[str, Any]]:
         """查捷運某站各方向的到站時間。"""
         data = await self._get(
-            f"/v2/Rail/Metro/LiveBoard/TRTC",
+            "/v2/Rail/Metro/LiveBoard/TRTC",
             params={"$filter": f"StationID eq '{station_id}'", "$format": "JSON"},
         )
         return data

@@ -1,4 +1,5 @@
 """認證相關 schemas。"""
+
 from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.user import UserResponse

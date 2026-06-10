@@ -6,8 +6,13 @@
 - 全專案共用同一個 settings 實例 (singleton)，不要在其他地方 os.getenv
 - 敏感資訊 (密碼、API Key) 絕對不寫死在程式碼，全從 .env 讀
 """
+
 from functools import lru_cache
+
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_INSECURE_JWT_DEFAULT = "change-me-in-production-please"
 
 
 class Settings(BaseSettings):
@@ -16,8 +21,10 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
 
+    # 逗號分隔的允許來源；開發可設 *（不帶 credentials）
+    CORS_ORIGINS: str = "*"
+
     # ---------- PostgreSQL ----------
-    # 對應 docker-compose.yml 的 db service
     DB_HOST: str = "db"
     DB_PORT: int = 5432
     DB_USER: str = "tdx_user"
@@ -26,10 +33,6 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        """
-        asyncpg 需要 postgresql+asyncpg:// 開頭的連線字串。
-        這是 SQLAlchemy 2.0 異步模式的標準格式。
-        """
         return (
             f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
@@ -45,28 +48,27 @@ class Settings(BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # ---------- JWT ----------
-    # 正式環境務必改成隨機長字串 (openssl rand -hex 32)
-    JWT_SECRET_KEY: str = "change-me-in-production-please"
+    JWT_SECRET_KEY: str = _INSECURE_JWT_DEFAULT
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60          # access token 1 小時
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30            # refresh token 30 天
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # ---------- 外部 API ----------
-    # TDX (交通部運輸資料流通服務平臺) — 公車/捷運/YouBike 即時資料
     TDX_CLIENT_ID: str = ""
     TDX_CLIENT_SECRET: str = ""
 
-    # OpenWeatherMap — 天氣
     OPENWEATHER_API_KEY: str = ""
 
-    # Google Maps — Places / Directions
-    GOOGLE_MAPS_API_KEY: str = ""
+    # 支援 GOOGLE_MAPS_API_KEY 或舊名 GOOGLE_API_KEY
+    GOOGLE_MAPS_API_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_MAPS_API_KEY", "GOOGLE_API_KEY"),
+    )
 
-    # Groq — 生成式 AI (LLaMA 3.3，免費額度比 Gemini 大 10 倍)
     GROQ_API_KEY: str = ""
 
     # ---------- 檔案上傳 ----------
-    UPLOAD_DIR: str = "/app/uploads"                # 容器內路徑
+    UPLOAD_DIR: str = "/app/uploads"
     MAX_UPLOAD_SIZE_MB: int = 10
     PUBLIC_CDN_BASE: str = "http://localhost:8000/static/uploads"
 
@@ -75,14 +77,33 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
+        populate_by_name=True,
     )
 
+    @property
+    def cors_origins_list(self) -> list[str]:
+        raw = self.CORS_ORIGINS.strip()
+        if raw == "*":
+            return ["*"]
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
-@lru_cache()
+    @property
+    def cors_allow_credentials(self) -> bool:
+        # 瀏覽器規範：allow_origins=["*"] 時不可帶 credentials
+        return "*" not in self.cors_origins_list
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if not self.DEBUG and self.JWT_SECRET_KEY == _INSECURE_JWT_DEFAULT:
+            raise ValueError(
+                "JWT_SECRET_KEY 仍為預設值；正式環境請在 .env 設定隨機字串 (openssl rand -hex 32)"
+            )
+        return self
+
+
+@lru_cache
 def get_settings() -> Settings:
-    """用 lru_cache 包起來，整個 App 共用同一個 Settings 實例。"""
     return Settings()
 
 
-# 讓其他模組可以 from app.core.config import settings 直接取用
 settings = get_settings()

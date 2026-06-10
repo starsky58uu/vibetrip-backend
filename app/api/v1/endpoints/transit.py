@@ -1,8 +1,9 @@
 """公車 / 捷運即時到站 + YouBike 端點。"""
+
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
 import redis.asyncio as redis
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db

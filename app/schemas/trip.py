@@ -1,4 +1,5 @@
 """盲盒行程 schemas。"""
+
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -13,8 +14,12 @@ class RecommendRequest(BaseModel):
     vibe_key: VibeKey = Field(..., description="心情分類 (random = 後端自己挑)")
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
-    weather_condition: str | None = Field(None, description="OpenWeatherMap 的 main 欄位，下雨時會避開戶外行程")
-    exclude_trip_ids: list[UUID] = Field(default_factory=list, description="「搖一搖重抽」時排除剛看過的")
+    weather_condition: str | None = Field(
+        None, description="OpenWeatherMap 的 main 欄位，下雨時會避開戶外行程"
+    )
+    exclude_trip_ids: list[UUID] = Field(
+        default_factory=list, description="「搖一搖重抽」時排除剛看過的"
+    )
 
 
 class TripItemResponse(BaseModel):

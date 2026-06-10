@@ -3,11 +3,11 @@ v1 API 總路由 — 掛載各模組的 sub-router。
 
 所有端點最終都會帶有 /api/v1 前綴 (見 main.py)。
 """
+
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     auth,
-    blindbox,      # 舊的測試端點，保留
     directions,
     places,
     spots,
@@ -19,7 +19,6 @@ from app.api.v1.endpoints import (
     weather,
 )
 
-
 api_router = APIRouter()
 
 # ---------- 認證 / 使用者 ----------
@@ -28,7 +27,6 @@ api_router.include_router(users.router, prefix="/users", tags=["使用者"])
 
 # ---------- 盲盒行程 ----------
 api_router.include_router(trips.router, prefix="/trips", tags=["盲盒行程"])
-api_router.include_router(blindbox.router, prefix="/blindbox", tags=["盲盒 (舊測試)"])
 
 # ---------- 天氣 ----------
 api_router.include_router(weather.router, prefix="/weather", tags=["天氣"])

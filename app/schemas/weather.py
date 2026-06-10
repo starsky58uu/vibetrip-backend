@@ -1,4 +1,5 @@
 """天氣 schemas — current / forecast。"""
+
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -7,9 +8,9 @@ from pydantic import BaseModel
 class CurrentWeatherResponse(BaseModel):
     temperature: float
     feels_like: float
-    condition: str          # Clear / Clouds / Rain ...
-    description: str        # 中文描述
-    icon: str               # OpenWeatherMap icon code, e.g. 01d
+    condition: str  # Clear / Clouds / Rain ...
+    description: str  # 中文描述
+    icon: str  # OpenWeatherMap icon code, e.g. 01d
     humidity: int
     wind_speed: float
     pressure: int
@@ -27,7 +28,7 @@ class HourlyForecast(BaseModel):
 
 
 class DailyForecast(BaseModel):
-    date: str              # YYYY-MM-DD
+    date: str  # YYYY-MM-DD
     temp_min: float
     temp_max: float
     condition: str

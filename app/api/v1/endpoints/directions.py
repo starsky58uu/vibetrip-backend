@@ -4,10 +4,11 @@
 前端只打一次，就能同時拿到步行、公車、捷運、YouBike 四種路線選項。
 比起前端自己去拼 Google + TDX，乾淨很多。
 """
+
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
 import redis.asyncio as redis
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -40,7 +41,7 @@ async def raw_directions(
     async with GoogleMapsClient() as g:
         raw = await g.directions(olat, olng, dlat, dlng, mode=mode)
     routes = raw.get("routes", [])
-    return {"routes": routes[:1]}   # 只回第一條，保持與 Google 原始結構相容
+    return {"routes": routes[:1]}  # 只回第一條，保持與 Google 原始結構相容
 
 
 @router.post("/calculate", response_model=DirectionsResponse)
@@ -87,8 +88,10 @@ async def _google_route(
 ) -> RouteOption:
     """把 Google Directions 的回應整理成我們的 RouteOption。"""
     raw = await g.directions(
-        req.origin_latitude, req.origin_longitude,
-        req.destination_latitude, req.destination_longitude,
+        req.origin_latitude,
+        req.origin_longitude,
+        req.destination_latitude,
+        req.destination_longitude,
         mode=mode,
     )
 
@@ -136,22 +139,38 @@ async def _youbike_route(
 
     # 起點附近「可借車」的站
     rent_stations = await transit_service.nearest_youbike(
-        r, db, req.origin_latitude, req.origin_longitude, "rent", limit=1,
+        r,
+        db,
+        req.origin_latitude,
+        req.origin_longitude,
+        "rent",
+        limit=1,
     )
     # 終點附近「可還車」的站
     return_stations = await transit_service.nearest_youbike(
-        r, db, req.destination_latitude, req.destination_longitude, "return", limit=1,
+        r,
+        db,
+        req.destination_latitude,
+        req.destination_longitude,
+        "return",
+        limit=1,
     )
 
     if not rent_stations:
         return RouteOption(
-            mode="youbike", duration_seconds=0, distance_meters=0,
-            available=False, reason="附近沒有可借的 YouBike",
+            mode="youbike",
+            duration_seconds=0,
+            distance_meters=0,
+            available=False,
+            reason="附近沒有可借的 YouBike",
         )
     if not return_stations:
         return RouteOption(
-            mode="youbike", duration_seconds=0, distance_meters=0,
-            available=False, reason="終點附近沒有可還車位",
+            mode="youbike",
+            duration_seconds=0,
+            distance_meters=0,
+            available=False,
+            reason="終點附近沒有可還車位",
         )
 
     rent = rent_stations[0]
@@ -165,7 +184,7 @@ async def _youbike_route(
     # 兩 YouBike 站之間的直線距離粗估 (想精準就改打一次 Google bicycling mode)
     dlat = req.destination_latitude - req.origin_latitude
     dlon = req.destination_longitude - req.origin_longitude
-    ride_meters = int(((dlat ** 2 + dlon ** 2) ** 0.5) * 111_000)
+    ride_meters = int(((dlat**2 + dlon**2) ** 0.5) * 111_000)
     ride_seconds = int(ride_meters / 4)
 
     return RouteOption(

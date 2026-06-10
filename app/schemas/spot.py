@@ -1,4 +1,5 @@
 """足跡 schemas — 個人 + 社群。"""
+
 from datetime import datetime
 from uuid import UUID
 

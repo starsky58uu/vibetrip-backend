@@ -7,7 +7,6 @@
 
 每次呼叫 POST /trips/recommend 時，後端會根據 vibe 隨機挑一個 Template 回傳。
 """
-from typing import Optional,Any
 
 from sqlalchemy import UUID, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -28,7 +27,7 @@ class TripTemplate(Base, UUIDPrimaryKey, TimestampMixin):
         back_populates="template",
         cascade="all, delete-orphan",
         order_by="TripItem.order_index",
-        lazy="selectin",   # 取 template 時自動 JOIN items，避免 N+1
+        lazy="selectin",  # 取 template 時自動 JOIN items，避免 N+1
     )
 
 

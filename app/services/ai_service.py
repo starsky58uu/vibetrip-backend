@@ -1,14 +1,24 @@
+"""
+AI 行程生成服務。
+
+流程：Google Places 搜尋真實店家 → Groq 選點寫文案 → 驗證打烊時間 → 補步行距離。
+快取 key：`vibetrip:trip:ai:{vibe}:{lat}:{lon}:{hour_slot}`（搖一搖時可跳過讀取）。
+"""
+
 import asyncio
 import json
+import logging
 import random
-
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
 from uuid import UUID
 
 from groq import AsyncGroq
+
 from app.core.config import settings
-from app.core.redis_client import get_redis, build_key, cache_get_json, cache_set_json
+from app.core.redis_client import build_key, cache_get_json, cache_set_json, get_redis
+
+logger = logging.getLogger(__name__)
 
 TW_TZ = timezone(timedelta(hours=8))
 client = AsyncGroq(api_key=settings.GROQ_API_KEY)
@@ -25,12 +35,12 @@ VIBE_ZH = {
 }
 
 VIBE_QUERY = {
-    "cafe":  "咖啡廳 獨立咖啡 書店 文創小店 公園 文創市集",
-    "food":  "餐廳 小吃 台灣美食 美食 麵包店 手搖飲 甜點 飲料店",
+    "cafe": "咖啡廳 獨立咖啡 書店 文創小店 公園 文創市集",
+    "food": "餐廳 小吃 台灣美食 美食 麵包店 手搖飲 甜點 飲料店",
     "photo": "拍照景點 網美咖啡廳 老街 公園 文創市集 網美景點",
-    "walk":  "公園 步道 老街 飲料店 咖啡廳 便利商店 手搖飲",
-    "gift":  "選物店 文創 手作 禮品店 文創市集 市集 特色小店 服飾店 雜貨店 書店 唱片行",
-    "rain":  "書店 博物館 室內展覽 咖啡廳 購物商場 百貨",
+    "walk": "公園 步道 老街 飲料店 咖啡廳 便利商店 手搖飲",
+    "gift": "選物店 文創 手作 禮品店 文創市集 市集 特色小店 服飾店 雜貨店 書店 唱片行",
+    "rain": "書店 博物館 室內展覽 咖啡廳 購物商場 百貨",
 }
 
 # ── 每種 vibe 的人性化行程組成規則（餵給 AI，避免全程都是同類地點）──────────────
@@ -84,12 +94,15 @@ VIBE_COMPOSITION_RULE = {
 def _dist_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Haversine 直線距離（公里）。"""
     la1, lo1, la2, lo2 = map(radians, [lat1, lon1, lat2, lon2])
-    return 2 * 6371 * asin(sqrt(
-        sin((la2 - la1) / 2) ** 2 + cos(la1) * cos(la2) * sin((lo2 - lo1) / 2) ** 2
-    ))
+    return (
+        2
+        * 6371
+        * asin(sqrt(sin((la2 - la1) / 2) ** 2 + cos(la1) * cos(la2) * sin((lo2 - lo1) / 2) ** 2))
+    )
 
 
 # ─── 主入口 ────────────────────────────────────────────────────────────────────
+
 
 async def generate_trip(
     vibe_key: str,
@@ -134,18 +147,18 @@ async def generate_trip(
     result = await _call_groq(vibe_key, lat, lon, weather, nearby)
 
     # Step 2b：防幻覺 — 確保 activity 名稱都是 Google Places 真實存在的店
-    if nearby and result.get('items'):
-        result['items'] = _validate_activities(result['items'], nearby)
+    if nearby and result.get("items"):
+        result["items"] = _validate_activities(result["items"], nearby)
 
     # Step 2c：後置打烊驗證 — 計算每站實際到達時間，剔除會關門的站
-    if nearby and result.get('items'):
-        result['items'] = _validate_closing_times(result['items'], nearby)
+    if nearby and result.get("items"):
+        result["items"] = _validate_closing_times(result["items"], nearby)
 
     # Step 3：用 Step1 快取座標算距離，找不到才重查 Google
     try:
-        result['items'] = await _enrich_distances(result['items'], lat, lon, nearby)
+        result["items"] = await _enrich_distances(result["items"], lat, lon, nearby)
     except Exception as e:
-        print(f"[MAPS WARN] 距離補正失敗: {e}", flush=True)
+        logger.warning("距離補正失敗: %s", e)
 
     # 無論有無 exclude，都把新結果存入快取供下次一般瀏覽使用
     await cache_set_json(redis, key, result, ttl_seconds=CACHE_TTL)
@@ -155,18 +168,20 @@ async def generate_trip(
 # ─── Step 1：Google Places 查附近真實店家 ─────────────────────────────────────
 
 # 深夜：即使 Google 沒有 is_open_now 資料，這些 Place type 通常仍開著
-_NIGHT_TOLERANT_TYPES = frozenset({
-    'convenience_store',  # 7-11、全家幾乎全天 24h
-    'park',               # 公園全天開放
-    'natural_feature',    # 自然景點
-    'tourist_attraction', # 觀光景點多為全天
-    'bar',                # 酒吧通常深夜開
-    'night_club',         # 夜店
-})
+_NIGHT_TOLERANT_TYPES = frozenset(
+    {
+        "convenience_store",  # 7-11、全家幾乎全天 24h
+        "park",  # 公園全天開放
+        "natural_feature",  # 自然景點
+        "tourist_attraction",  # 觀光景點多為全天
+        "bar",  # 酒吧通常深夜開
+        "night_club",  # 夜店
+    }
+)
 
 # 結果不足時用的通用補充清單
 _NIGHT_SUPPLEMENT_QUERY = "居酒屋 酒吧 漫畫咖啡廳 宵夜小吃 鹹酥雞 24小時便利商店 夜間公園"
-_DAY_SUPPLEMENT_QUERY   = "咖啡廳 餐廳 景點 公園 書店 甜點 文創"
+_DAY_SUPPLEMENT_QUERY = "咖啡廳 餐廳 景點 公園 書店 甜點 文創"
 
 
 async def _cached_text_search(redis, query: str, lat: float, lon: float) -> list:
@@ -189,7 +204,7 @@ async def _cached_text_search(redis, query: str, lat: float, lon: float) -> list
         await cache_set_json(redis, key, places, ttl_seconds=60 * 60)
         return places
     except Exception as e:
-        print(f"[PLACES WARN] '{query[:20]}…': {e}", flush=True)
+        logger.warning("Places 搜尋失敗 '%s…': %s", query[:20], e)
         return []
 
 
@@ -202,28 +217,26 @@ async def _search_nearby(vibe_key: str, lat: float, lon: float) -> list[dict]:
     回傳格式（每筆都帶 lat/lon，供 Step3 直接使用）：
       { name, address, rating, types, lat, lon }
     """
-    from app.services.external.google_client import GoogleMapsClient
-
-    current_hour  = datetime.now(TW_TZ).hour
-    is_late_night    = current_hour >= 22 or current_hour < 6   # 22:00 ~ 05:59
-    is_early_morning = 6 <= current_hour < 9                    # 06:00 ~ 08:59
+    current_hour = datetime.now(TW_TZ).hour
+    is_late_night = current_hour >= 22 or current_hour < 6  # 22:00 ~ 05:59
+    is_early_morning = 6 <= current_hour < 9  # 06:00 ~ 08:59
 
     def _passes(p: dict) -> bool:
         """單筆 Place 是否通過時段過濾。"""
-        status = p.get('business_status')
-        if status and status != 'OPERATIONAL':
-            return False                          # 永久 / 暫時歇業
+        status = p.get("business_status")
+        if status and status != "OPERATIONAL":
+            return False  # 永久 / 暫時歇業
 
-        rating      = p.get('rating', 0)
-        is_open_now = p.get('opening_hours', {}).get('open_now')
-        types       = p.get('types', [])
-        is_landmark = any(t in types for t in ('park', 'natural_feature', 'tourist_attraction'))
+        rating = p.get("rating", 0)
+        is_open_now = p.get("opening_hours", {}).get("open_now")
+        types = p.get("types", [])
+        is_landmark = any(t in types for t in ("park", "natural_feature", "tourist_attraction"))
         is_tolerant = any(t in _NIGHT_TOLERANT_TYPES for t in types)
 
         if is_landmark:
-            return True                           # 開放空間不看 is_open_now
+            return True  # 開放空間不看 is_open_now
         if is_open_now is False:
-            return False                          # 明確關門
+            return False  # 明確關門
         # 深夜 / 清晨：沒有 is_open_now 資料的商業店家，
         # 除非屬於「大概率仍開」的類型，否則排除
         if (is_late_night or is_early_morning) and is_open_now is None and not is_tolerant:
@@ -234,25 +247,27 @@ async def _search_nearby(vibe_key: str, lat: float, lon: float) -> list[dict]:
         """從 Google Places 清單提取符合條件且 1.5km 以內的店家。"""
         out = []
         for p in places:
-            loc = p.get('geometry', {}).get('location', {})
-            p_lat, p_lon = loc.get('lat', 0), loc.get('lng', 0)
+            loc = p.get("geometry", {}).get("location", {})
+            p_lat, p_lon = loc.get("lat", 0), loc.get("lng", 0)
             if _dist_km(lat, lon, p_lat, p_lon) > 1.5:
                 continue
             if not _passes(p):
                 continue
-            name = p.get('name', '')
+            name = p.get("name", "")
             if name in existing:
                 continue
-            out.append({
-                'name':     name,
-                'address':  p.get('formatted_address', ''),
-                'rating':   p.get('rating', 0),
-                'types':    p.get('types', []),
-                'lat':      p_lat,
-                'lon':      p_lon,
-                'place_id': p.get('place_id', ''),   # 供 Place Details 查打烊時間
-            })
-            if len(out) >= 15:                 # 候選池放大：給 AI 更多選擇
+            out.append(
+                {
+                    "name": name,
+                    "address": p.get("formatted_address", ""),
+                    "rating": p.get("rating", 0),
+                    "types": p.get("types", []),
+                    "lat": p_lat,
+                    "lon": p_lon,
+                    "place_id": p.get("place_id", ""),  # 供 Place Details 查打烊時間
+                }
+            )
+            if len(out) >= 15:  # 候選池放大：給 AI 更多選擇
                 break
         return out
 
@@ -262,36 +277,35 @@ async def _search_nearby(vibe_key: str, lat: float, lon: float) -> list[dict]:
     # 又能藉「每次抽不同關鍵字」帶來真正的變化。
     redis = await get_redis()
     keywords = VIBE_QUERY.get(vibe_key, "景點 店家").split()
-    chosen   = random.sample(keywords, k=min(3, len(keywords)))
+    chosen = random.sample(keywords, k=min(3, len(keywords)))
 
-    raw_lists = await asyncio.gather(*[
-        _cached_text_search(redis, q, lat, lon) for q in chosen
-    ])
+    raw_lists = await asyncio.gather(*[_cached_text_search(redis, q, lat, lon) for q in chosen])
 
-    results:  list[dict] = []
-    existing: set[str]   = set()
+    results: list[dict] = []
+    existing: set[str] = set()
     for raw in raw_lists:
         for p in _extract(raw, existing):
-            existing.add(p['name'])
+            existing.add(p["name"])
             results.append(p)
 
     # ── 第二段：主搜不到 3 筆 → 用通用清單補滿（也走 cache）───────────────────
     if len(results) < 3:
         main_count = len(results)
         supp_query = _NIGHT_SUPPLEMENT_QUERY if is_late_night else _DAY_SUPPLEMENT_QUERY
-        raw_supp   = await _cached_text_search(redis, supp_query, lat, lon)
+        raw_supp = await _cached_text_search(redis, supp_query, lat, lon)
         supplement = _extract(raw_supp, existing)
         for p in supplement:
             if len(results) >= 15:
                 break
-            existing.add(p['name'])
+            existing.add(p["name"])
             results.append(p)
         if supplement:
             tag = "NIGHT" if is_late_night else "DAY"
-            print(
-                f"[{tag} SUPPLEMENT] 主搜得 {main_count} 筆，"
-                f"補充 {len(supplement)} 筆候選",
-                flush=True,
+            logger.info(
+                "[%s SUPPLEMENT] 主搜得 %d 筆，補充 %d 筆候選",
+                tag,
+                main_count,
+                len(supplement),
             )
 
     # 打亂順序 + 上限 15：避免 AI 偏向前幾家，搖一搖 / 重生成才會有變化。
@@ -300,6 +314,7 @@ async def _search_nearby(vibe_key: str, lat: float, lon: float) -> list[dict]:
 
 
 # ─── Step 1b：抓打烊時間 + 過濾快關的地點 ─────────────────────────────────────
+
 
 async def _fetch_closing_times(nearby: list[dict]) -> None:
     """
@@ -322,22 +337,22 @@ async def _fetch_closing_times(nearby: list[dict]) -> None:
     def _parse_today_close(periods: list) -> str | None:
         """從 periods 解析出「今天」的打烊時間字串，沒有則回 None。"""
         for period in periods:
-            open_info  = period.get('open', {})
-            close_info = period.get('close')
-            if open_info.get('day') != google_today:
+            open_info = period.get("open", {})
+            close_info = period.get("close")
+            if open_info.get("day") != google_today:
                 continue
             if close_info is None:
-                return '24:00'                       # 全天 24 小時
-            t = close_info.get('time', '')           # "HHMM"
+                return "24:00"  # 全天 24 小時
+            t = close_info.get("time", "")  # "HHMM"
             if len(t) == 4:
                 h, m = int(t[:2]), int(t[2:])
-                next_day = close_info.get('day') != google_today
-                return f"{h:02d}:{m:02d}" + ('↑' if next_day else '')
+                next_day = close_info.get("day") != google_today
+                return f"{h:02d}:{m:02d}" + ("↑" if next_day else "")
             return None
         return None
 
     async def _one(place: dict) -> None:
-        pid = place.get('place_id', '')
+        pid = place.get("place_id", "")
         if not pid:
             return
 
@@ -345,23 +360,23 @@ async def _fetch_closing_times(nearby: list[dict]) -> None:
         # 先讀快取（命中就不打 API）
         cached = await cache_get_json(redis, ckey)
         if cached is not None:
-            ca = cached.get('closes_at')
+            ca = cached.get("closes_at")
             if ca:
-                place['closes_at'] = ca
+                place["closes_at"] = ca
             return
 
         # 快取未命中 → 打 Place Details，再回寫快取
         try:
             async with GoogleMapsClient() as gmaps:
                 details = await gmaps.place_details(pid, fields="opening_hours")
-            periods = details.get('opening_hours', {}).get('periods', [])
+            periods = details.get("opening_hours", {}).get("periods", [])
             ca = _parse_today_close(periods)
             if ca:
-                place['closes_at'] = ca
+                place["closes_at"] = ca
             # 含 None 也快取，避免沒有營業時間資料的地點被反覆查詢；TTL 24h
-            await cache_set_json(redis, ckey, {'closes_at': ca}, ttl_seconds=60 * 60 * 24)
+            await cache_set_json(redis, ckey, {"closes_at": ca}, ttl_seconds=60 * 60 * 24)
         except Exception as e:
-            print(f"[CLOSE TIME WARN] {place.get('name')}: {e}", flush=True)
+            logger.warning("查打烊時間失敗 %s: %s", place.get("name"), e)
 
     await asyncio.gather(*[_one(p) for p in nearby])
 
@@ -371,15 +386,15 @@ def _filter_closing_soon(nearby: list[dict], min_stay_min: int = 30) -> list[dic
     移除在「現在起 min_stay_min 分鐘內」就打烊的地點。
     （連最短的停留都排不進去的，直接砍掉，讓 AI 別排它）
     """
-    now_tw  = datetime.now(TW_TZ)
+    now_tw = datetime.now(TW_TZ)
     now_min = now_tw.hour * 60 + now_tw.minute
 
     def _has_time(p: dict) -> bool:
-        ca = p.get('closes_at', '')
-        if not ca or ca == '24:00':
-            return True           # 不知道 / 全天 → 保留
-        next_day = ca.endswith('↑')
-        ts = ca.rstrip('↑')
+        ca = p.get("closes_at", "")
+        if not ca or ca == "24:00":
+            return True  # 不知道 / 全天 → 保留
+        next_day = ca.endswith("↑")
+        ts = ca.rstrip("↑")
         try:
             h, m = int(ts[:2]), int(ts[3:])
         except (ValueError, IndexError):
@@ -390,11 +405,11 @@ def _filter_closing_soon(nearby: list[dict], min_stay_min: int = 30) -> list[dic
         remaining = close_min - now_min
         return remaining >= min_stay_min
 
-    before  = len(nearby)
+    before = len(nearby)
     filtered = [p for p in nearby if _has_time(p)]
-    removed  = before - len(filtered)
+    removed = before - len(filtered)
     if removed:
-        print(f"[CLOSING SOON] 移除 {removed} 個快打烊地點（剩餘 < {min_stay_min}min）", flush=True)
+        logger.info("移除 %d 個快打烊地點（剩餘 < %dmin）", removed, min_stay_min)
     return filtered
 
 
@@ -411,9 +426,9 @@ def _validate_closing_times(items: list[dict], nearby: list[dict]) -> list[dict]
         return items
 
     # name → closes_at 查找表（_validate_activities 跑完後 activity 都是真實店名）
-    closes_lookup: dict[str, str] = {p['name']: p.get('closes_at', '') for p in nearby}
+    closes_lookup: dict[str, str] = {p["name"]: p.get("closes_at", "") for p in nearby}
 
-    now_tw  = datetime.now(TW_TZ)
+    now_tw = datetime.now(TW_TZ)
     now_min = now_tw.hour * 60 + now_tw.minute
 
     # 第一站到達時間：現在 + 10 分鐘
@@ -421,57 +436,57 @@ def _validate_closing_times(items: list[dict], nearby: list[dict]) -> list[dict]
 
     def _parse_close_min(closes_at: str) -> int | None:
         """將 closes_at 字串轉成「今日分鐘數」，次日凌晨加 1440。"""
-        if not closes_at or closes_at == '24:00':
-            return None          # 全天或未知 → 不限制
-        next_day = closes_at.endswith('↑')
-        ts = closes_at.rstrip('↑')
+        if not closes_at or closes_at == "24:00":
+            return None  # 全天或未知 → 不限制
+        next_day = closes_at.endswith("↑")
+        ts = closes_at.rstrip("↑")
         try:
             h, m = int(ts[:2]), int(ts[3:5])
         except (ValueError, IndexError):
             return None
         close_min = h * 60 + m
         if next_day or close_min < 6 * 60:
-            close_min += 24 * 60   # 次日凌晨
+            close_min += 24 * 60  # 次日凌晨
         return close_min
 
     valid: list[dict] = []
     for item in items:
-        activity = item.get('activity', '')
+        activity = item.get("activity", "")
         # 解析停留時長（"60min" → 60、"45" → 45，fallback 45）
-        dur_raw = item.get('dur', '45min')
+        dur_raw = item.get("dur", "45min")
         try:
-            dur = int(''.join(ch for ch in dur_raw if ch.isdigit())) or 45
+            dur = int("".join(ch for ch in dur_raw if ch.isdigit())) or 45
         except Exception:
             dur = 45
 
-        closes_at = closes_lookup.get(activity, '')
+        closes_at = closes_lookup.get(activity, "")
         close_min = _parse_close_min(closes_at)
 
         if close_min is not None:
-            leave_min = cursor + dur           # 預計離開時間
+            leave_min = cursor + dur  # 預計離開時間
             if leave_min > close_min:
                 arrive_hm = f"{cursor // 60:02d}:{cursor % 60:02d}"
-                leave_hm  = f"{leave_min // 60 % 24:02d}:{leave_min % 60:02d}"
-                print(
-                    f"[CLOSING VALIDATE] 剔除 '{activity}'："
-                    f"預計到達 {arrive_hm}，停留 {dur}min，"
-                    f"離開 {leave_hm} > 打烊 {closes_at}",
-                    flush=True,
+                leave_hm = f"{leave_min // 60 % 24:02d}:{leave_min % 60:02d}"
+                logger.info(
+                    "剔除 '%s'：到達 %s，停留 %dmin，離開 %s > 打烊 %s",
+                    activity,
+                    arrive_hm,
+                    dur,
+                    leave_hm,
+                    closes_at,
                 )
-                continue    # 這一站被剔除，cursor 不往前推
+                continue  # 這一站被剔除，cursor 不往前推
 
         valid.append(item)
-        cursor += dur + 10   # 下一站到達 = 本站離開 + 10 分鐘移動
+        cursor += dur + 10  # 下一站到達 = 本站離開 + 10 分鐘移動
 
     if len(valid) < len(items):
-        print(
-            f"[CLOSING VALIDATE] 共剔除 {len(items) - len(valid)} 站（會超過打烊時間）",
-            flush=True,
-        )
+        logger.info("打烊驗證共剔除 %d 站", len(items) - len(valid))
     return valid
 
 
 # ─── Step 2：Groq AI 生成行程 ─────────────────────────────────────────────────
+
 
 def _slot_time_hint(now_tw: datetime) -> str:
     """
@@ -489,8 +504,7 @@ def _slot_time_hint(now_tw: datetime) -> str:
 
 
 async def _call_groq(
-    vibe_key: str, lat: float, lon: float,
-    weather: str | None, nearby: list[dict]
+    vibe_key: str, lat: float, lon: float, weather: str | None, nearby: list[dict]
 ) -> dict:
     vibe_zh = VIBE_ZH.get(vibe_key, vibe_key)
     weather_hint = f"，今天天氣是{weather}" if weather else ""
@@ -533,16 +547,17 @@ async def _call_groq(
     composition_rule = VIBE_COMPOSITION_RULE.get(vibe_key, "")
 
     if nearby:
+
         def _fmt_place(i: int, p: dict) -> str:
-            ca = p.get('closes_at', '')
-            if ca == '24:00':
-                close_tag = '，24小時'
+            ca = p.get("closes_at", "")
+            if ca == "24:00":
+                close_tag = "，24小時"
             elif ca:
                 # "21:30" → 打烊 21:30；"01:00↑" → 打烊 01:00(次日)
                 close_tag = f"，打烊 {ca.replace('↑', '(次日)')}"
             else:
-                close_tag = ''
-            return f"{i+1}. {p['name']}（評分 {p['rating']}{close_tag}）— {p['address']}"
+                close_tag = ""
+            return f"{i + 1}. {p['name']}（評分 {p['rating']}{close_tag}）— {p['address']}"
 
         place_list = "\n".join(_fmt_place(i, p) for i, p in enumerate(nearby))
         places_block = f"""
@@ -632,7 +647,10 @@ async def _call_groq(
     response = await client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
-            {"role": "system", "content": "你是台灣旅遊專家，只以 JSON 格式回覆，不加任何說明文字。"},
+            {
+                "role": "system",
+                "content": "你是台灣旅遊專家，只以 JSON 格式回覆，不加任何說明文字。",
+            },
             {"role": "user", "content": prompt},
         ],
         temperature=0.75,
@@ -643,6 +661,7 @@ async def _call_groq(
 
 
 # ─── Step 2b：防幻覺驗證 ──────────────────────────────────────────────────────
+
 
 def _validate_activities(items: list[dict], nearby: list[dict]) -> list[dict]:
     """
@@ -660,56 +679,54 @@ def _validate_activities(items: list[dict], nearby: list[dict]) -> list[dict]:
     def find_real_name(activity: str) -> str | None:
         # 1. 完全相符
         for p in nearby:
-            if p['name'] == activity:
-                return p['name']
+            if p["name"] == activity:
+                return p["name"]
         # 2. 部分包含（AI 可能縮寫或加括號）
         for p in nearby:
-            if p['name'] in activity or activity in p['name']:
-                return p['name']
+            if p["name"] in activity or activity in p["name"]:
+                return p["name"]
         return None
 
     validated = []
     # 統計每個地點已被用幾次，用來決定備選順序
-    use_count: dict[str, int] = {p['name']: 0 for p in nearby}
+    use_count: dict[str, int] = {p["name"]: 0 for p in nearby}
 
     for item in items:
-        real = find_real_name(item.get('activity', ''))
-        used_names = {v['activity'] for v in validated}
+        real = find_real_name(item.get("activity", ""))
+        used_names = {v["activity"] for v in validated}
 
         # 真名存在「且」尚未在本趟用過 → 直接收下
         if real and real not in used_names:
             use_count[real] = use_count.get(real, 0) + 1
-            validated.append({**item, 'activity': real})
+            validated.append({**item, "activity": real})
             continue
 
         # 否則：AI 編造不在清單、或重複選同一家 → 換成未使用的最高評分地點
-        by_rating = sorted(nearby, key=lambda x: -x.get('rating', 0))
+        by_rating = sorted(nearby, key=lambda x: -x.get("rating", 0))
         fallback_place = next(
-            (p for p in by_rating if p['name'] not in used_names),
+            (p for p in by_rating if p["name"] not in used_names),
             None,
         )
         if fallback_place is None:
             # nearby 已全數用過（候選清單比行程站數少）→ 寧可少一站也不重複
-            print(
-                f"[VALIDATE DROP] '{item.get('activity')}' "
-                f"附近候選清單已用完，從行程移除此站",
-                flush=True,
-            )
+            logger.info("候選清單已用完，移除站點 '%s'", item.get("activity"))
             continue
 
-        use_count[fallback_place['name']] = use_count.get(fallback_place['name'], 0) + 1
-        reason = '已重複' if real else '不在清單'
-        print(
-            f"[VALIDATE FIX] '{item.get('activity')}' ({reason}) "
-            f"→ 替換為 '{fallback_place['name']}'",
-            flush=True,
+        use_count[fallback_place["name"]] = use_count.get(fallback_place["name"], 0) + 1
+        reason = "已重複" if real else "不在清單"
+        logger.info(
+            "替換站點 '%s' (%s) → '%s'",
+            item.get("activity"),
+            reason,
+            fallback_place["name"],
         )
-        validated.append({**item, 'activity': fallback_place['name']})
+        validated.append({**item, "activity": fallback_place["name"]})
 
     return validated
 
 
 # ─── Step 3：距離 + 交通模式判斷 ──────────────────────────────────────────────
+
 
 def _match_coord(activity: str, nearby_cache: list[dict]) -> tuple[float, float] | None:
     """
@@ -718,12 +735,12 @@ def _match_coord(activity: str, nearby_cache: list[dict]) -> tuple[float, float]
     """
     # 精確比對
     for p in nearby_cache:
-        if p['name'] == activity:
-            return (p['lat'], p['lon'])
+        if p["name"] == activity:
+            return (p["lat"], p["lon"])
     # 部分包含比對（AI 可能縮寫或加括號）
     for p in nearby_cache:
-        if p['name'] in activity or activity in p['name']:
-            return (p['lat'], p['lon'])
+        if p["name"] in activity or activity in p["name"]:
+            return (p["lat"], p["lon"])
     return None
 
 
@@ -748,68 +765,76 @@ async def _enrich_distances(
         search_indices = []
 
         for i, item in enumerate(items):
-            coord = _match_coord(item['activity'], nearby_cache or [])
+            coord = _match_coord(item["activity"], nearby_cache or [])
             if coord:
                 coords.append(coord)
             else:
                 # Cache miss：標記位置，之後批次查詢
                 coords.append(None)
                 search_tasks.append(
-                    gmaps.text_search(item['activity'], lat=user_lat, lon=user_lon, radius_meters=2000)
+                    gmaps.text_search(
+                        item["activity"], lat=user_lat, lon=user_lon, radius_meters=2000
+                    )
                 )
                 search_indices.append(i)
 
         # 批次執行所有 cache miss 的 Google 搜尋
         if search_tasks:
             search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
-            for list_i, result in zip(search_indices, search_results):
+            for list_i, result in zip(search_indices, search_results, strict=True):
                 if isinstance(result, Exception) or not result:
                     continue
-                loc = result[0]['geometry']['location']
-                p_lat, p_lon = loc['lat'], loc['lng']
+                loc = result[0]["geometry"]["location"]
+                p_lat, p_lon = loc["lat"], loc["lng"]
                 if _dist_km(user_lat, user_lon, p_lat, p_lon) <= 5.0:
                     coords[list_i] = (p_lat, p_lon)
 
         # ── 算路線（各段並行）──────────────────────────────────────────────────
         # 每一段的「起點」在座標解析完後就已確定（前一個有座標的地點，或使用者位置），
         # 不需互相等待 → 全部並行，行程生成快好幾秒。
-        legs: list[tuple[int, float, float, float, float]] = []  # (item_idx, fromLat, fromLon, toLat, toLon)
+        legs: list[
+            tuple[int, float, float, float, float]
+        ] = []  # (item_idx, fromLat, fromLon, toLat, toLon)
         prev_lat, prev_lon = user_lat, user_lon
         for i, coord in enumerate(coords):
             if coord is not None:
                 legs.append((i, prev_lat, prev_lon, coord[0], coord[1]))
                 prev_lat, prev_lon = coord
 
-        async def _one_leg(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> str | None:
+        async def _one_leg(
+            from_lat: float, from_lon: float, to_lat: float, to_lon: float
+        ) -> str | None:
             try:
                 walk = await gmaps.directions(from_lat, from_lon, to_lat, to_lon, mode="walking")
-                if not walk.get('routes'):
+                if not walk.get("routes"):
                     return None
-                leg = walk['routes'][0]['legs'][0]
-                walk_min = round(leg['duration']['value'] / 60)
-                dist_m   = leg['distance']['value']
-                dist_lbl = f'{dist_m}m' if dist_m < 1000 else f'{dist_m / 1000:.1f}km'
+                leg = walk["routes"][0]["legs"][0]
+                walk_min = round(leg["duration"]["value"] / 60)
+                dist_m = leg["distance"]["value"]
+                dist_lbl = f"{dist_m}m" if dist_m < 1000 else f"{dist_m / 1000:.1f}km"
                 if walk_min > 10:
                     transit_str = await _check_transit(gmaps, from_lat, from_lon, to_lat, to_lon)
-                    return transit_str or f'步行 {walk_min} 分鐘 ({dist_lbl})'
-                return f'步行 {walk_min} 分鐘 ({dist_lbl})'
+                    return transit_str or f"步行 {walk_min} 分鐘 ({dist_lbl})"
+                return f"步行 {walk_min} 分鐘 ({dist_lbl})"
             except Exception:
                 return None
 
         leg_results = await asyncio.gather(
             *[_one_leg(fl, fo, tl, to) for (_idx, fl, fo, tl, to) in legs]
         )
-        for (idx, *_rest), dist in zip(legs, leg_results):
+        for (idx, *_rest), dist in zip(legs, leg_results, strict=True):
             if dist:
-                items[idx]['dist'] = dist
+                items[idx]["dist"] = dist
 
     return items
 
 
 async def _check_transit(
     gmaps,
-    prev_lat: float, prev_lon: float,
-    dest_lat: float, dest_lon: float,
+    prev_lat: float,
+    prev_lon: float,
+    dest_lat: float,
+    dest_lon: float,
 ) -> str | None:
     """
     查現在出發能否搭大眾運輸：
@@ -820,32 +845,36 @@ async def _check_transit(
     now_ts = int(datetime.now(TW_TZ).timestamp())
     try:
         route = await gmaps.directions(
-            prev_lat, prev_lon, dest_lat, dest_lon,
-            mode="transit", departure_time=now_ts,
+            prev_lat,
+            prev_lon,
+            dest_lat,
+            dest_lon,
+            mode="transit",
+            departure_time=now_ts,
         )
     except Exception:
         return None
 
-    if not route.get('routes'):
+    if not route.get("routes"):
         return None
 
-    leg   = route['routes'][0]['legs'][0]
-    steps = leg.get('steps', [])
+    leg = route["routes"][0]["legs"][0]
+    steps = leg.get("steps", [])
 
     walk_to_stop_sec = 0
-    first_transit    = None
+    first_transit = None
     for step in steps:
-        if step.get('travel_mode') == 'WALKING' and first_transit is None:
-            walk_to_stop_sec += step['duration']['value']
-        elif step.get('travel_mode') == 'TRANSIT':
+        if step.get("travel_mode") == "WALKING" and first_transit is None:
+            walk_to_stop_sec += step["duration"]["value"]
+        elif step.get("travel_mode") == "TRANSIT":
             first_transit = step
             break
 
     if first_transit is None or walk_to_stop_sec > 10 * 60:
         return None
 
-    td     = first_transit.get('transit_details', {})
-    dep_ts = td.get('departure_time', {}).get('value')
+    td = first_transit.get("transit_details", {})
+    dep_ts = td.get("departure_time", {}).get("value")
     if dep_ts is None:
         return None
 
@@ -853,16 +882,16 @@ async def _check_transit(
     if wait_min < 0 or wait_min > 30:
         return None
 
-    total_min    = round(leg['duration']['value'] / 60)
-    line         = td.get('line', {})
-    vehicle_type = line.get('vehicle', {}).get('type', '')
-    line_name    = line.get('short_name') or line.get('name', '')
+    total_min = round(leg["duration"]["value"] / 60)
+    line = td.get("line", {})
+    vehicle_type = line.get("vehicle", {}).get("type", "")
+    line_name = line.get("short_name") or line.get("name", "")
 
-    if 'SUBWAY' in vehicle_type or 'HEAVY_RAIL' in vehicle_type:
-        mode_label = f'搭捷運{line_name}'
-    elif 'BUS' in vehicle_type:
-        mode_label = f'搭公車{line_name}'
+    if "SUBWAY" in vehicle_type or "HEAVY_RAIL" in vehicle_type:
+        mode_label = f"搭捷運{line_name}"
+    elif "BUS" in vehicle_type:
+        mode_label = f"搭公車{line_name}"
     else:
-        mode_label = f'搭{line_name}' if line_name else '搭大眾運輸'
+        mode_label = f"搭{line_name}" if line_name else "搭大眾運輸"
 
-    return f'{mode_label} 約{total_min}分鐘（{wait_min}分後有班）'
+    return f"{mode_label} 約{total_min}分鐘（{wait_min}分後有班）"

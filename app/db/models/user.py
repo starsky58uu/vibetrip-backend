@@ -1,7 +1,6 @@
 """
 使用者資料表 — 純靜態資料，存 PostgreSQL。
 """
-from typing import Optional
 
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,7 +21,7 @@ class User(Base, UUIDPrimaryKey, TimestampMixin):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # 顯示名稱，可與 username 不同
-    display_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # 頭像 URL
-    avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)

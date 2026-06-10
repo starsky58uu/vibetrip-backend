@@ -1,9 +1,9 @@
 """大眾運輸 schemas — 公車 / 捷運 / YouBike。"""
+
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # ---------- 公車 ----------
 BusStatus = Literal["approaching", "in_transit", "departure", "no_service"]
@@ -37,7 +37,7 @@ class YoubikeStationResponse(BaseModel):
     latitude: float
     longitude: float
     distance_meters: float
-    available_rent: int   # 可借車輛
+    available_rent: int  # 可借車輛
     available_return: int  # 可還車位
     bike_type: str
 
@@ -70,7 +70,9 @@ class DirectionsRequest(BaseModel):
     origin_longitude: float
     destination_latitude: float
     destination_longitude: float
-    modes: list[TransportMode] = Field(default_factory=lambda: ["walking", "transit_bus", "transit_mrt", "youbike"])
+    modes: list[TransportMode] = Field(
+        default_factory=lambda: ["walking", "transit_bus", "transit_mrt", "youbike"]
+    )
 
 
 class DirectionsResponse(BaseModel):

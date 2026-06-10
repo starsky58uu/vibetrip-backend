@@ -1,8 +1,9 @@
 """天氣端點 — 代理 OpenWeatherMap，加上 Redis 快取。"""
+
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
 import redis.asyncio as redis
+from fastapi import APIRouter, Depends, Query
 
 from app.core.redis_client import get_redis
 from app.schemas.weather import CurrentWeatherResponse, ForecastResponse

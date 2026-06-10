@@ -1,22 +1,25 @@
 """
 Google Maps Platform client — Places + Directions。
-
-為什麼不讓前端直接打？
-1. Google API key 不能暴露在 App 裡 (會被盜用產生費用)
-2. 後端能快取相同請求、控制速率
-
-docs:
-- https://developers.google.com/maps/documentation/places/web-service
-- https://developers.google.com/maps/documentation/directions
 """
+
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
 
-
 GOOGLE_BASE = "https://maps.googleapis.com/maps/api"
+
+# HTTP 200 但 API 層失敗的 status；ZERO_RESULTS 視為正常空結果
+_OK_STATUSES = frozenset({"OK", "ZERO_RESULTS"})
+
+
+class GoogleMapsError(Exception):
+    """Google API 回傳非 OK status（例如 REQUEST_DENIED、OVER_QUERY_LIMIT）。"""
+
+    def __init__(self, status: str, message: str = "") -> None:
+        self.status = status
+        super().__init__(message or status)
 
 
 class GoogleMapsClient:
@@ -35,9 +38,12 @@ class GoogleMapsClient:
             params={"key": settings.GOOGLE_MAPS_API_KEY, "language": "zh-TW", **params},
         )
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        api_status = data.get("status", "OK")
+        if api_status not in _OK_STATUSES:
+            raise GoogleMapsError(api_status, data.get("error_message", api_status))
+        return data
 
-    # ---------- Places ----------
     async def nearby_search(
         self,
         lat: float,
@@ -45,7 +51,6 @@ class GoogleMapsClient:
         place_type: str,
         radius_meters: int = 500,
     ) -> list[dict[str, Any]]:
-        """附近搜尋，對應前端 AR 畫面的「附近超商/咖啡...」。"""
         data = await self._get(
             "/place/nearbysearch/json",
             location=f"{lat},{lon}",
@@ -61,7 +66,6 @@ class GoogleMapsClient:
         lon: float | None = None,
         radius_meters: int = 5000,
     ) -> list[dict[str, Any]]:
-        """文字搜尋，對應 AR 畫面的搜尋框。"""
         params: dict[str, Any] = {"query": query}
         if lat is not None and lon is not None:
             params["location"] = f"{lat},{lon}"
@@ -74,11 +78,6 @@ class GoogleMapsClient:
         place_id: str,
         fields: str = "opening_hours",
     ) -> dict[str, Any]:
-        """
-        取得單一地點的詳細資訊。
-        fields 預設只拿 opening_hours（含 periods）以節省費用。
-        其他常用 fields：name, formatted_address, rating, geometry
-        """
         data = await self._get(
             "/place/details/json",
             place_id=place_id,
@@ -86,7 +85,6 @@ class GoogleMapsClient:
         )
         return data.get("result", {})
 
-    # ---------- Directions ----------
     async def directions(
         self,
         origin_lat: float,
@@ -94,12 +92,8 @@ class GoogleMapsClient:
         dest_lat: float,
         dest_lon: float,
         mode: str = "walking",
-        departure_time: int | None = None,  # Unix timestamp，transit 模式用來查當下班次
+        departure_time: int | None = None,
     ) -> dict[str, Any]:
-        """
-        mode: walking / transit / bicycling / driving
-        departure_time: Unix timestamp（秒），transit 模式傳入以查詢該時刻的實際班次
-        """
         params: dict[str, Any] = {
             "origin": f"{origin_lat},{origin_lon}",
             "destination": f"{dest_lat},{dest_lon}",

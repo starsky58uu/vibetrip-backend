@@ -12,7 +12,8 @@
 │ TDX access_token     │ Redis       │ 跨 worker 共用           │
 └──────────────────────┴─────────────┴──────────────────────────┘
 """
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 import redis.asyncio as redis
 from sqlalchemy import text
@@ -29,10 +30,9 @@ from app.schemas.transit import (
 )
 from app.services.external.tdx_client import TDXClient
 
-
-BUS_ETA_TTL = 15          # 秒，配合 TDX 更新頻率
+BUS_ETA_TTL = 15  # 秒，配合 TDX 更新頻率
 MRT_ETA_TTL = 15
-YOUBIKE_STATUS_TTL = 30   # 秒
+YOUBIKE_STATUS_TTL = 30  # 秒
 
 
 # ==========================================================================
@@ -63,9 +63,12 @@ def _parse_bus_eta(raw: dict | None, route: str, stop: str) -> BusEtaResponse:
     """把 TDX 格式轉成我們的 schema。"""
     if raw is None:
         return BusEtaResponse(
-            route_name=route, stop_name=stop, eta_seconds=None,
-            plate_number=None, status="no_service",
-            fetched_at=datetime.now(timezone.utc),
+            route_name=route,
+            stop_name=stop,
+            eta_seconds=None,
+            plate_number=None,
+            status="no_service",
+            fetched_at=datetime.now(UTC),
         )
 
     # TDX StopStatus: 0=正常, 1=尚未發車, 2=交管不停靠, 3=末班駛離, 4=排班...
@@ -78,10 +81,10 @@ def _parse_bus_eta(raw: dict | None, route: str, stop: str) -> BusEtaResponse:
         eta_seconds = None
     elif eta_seconds is None:
         status = "no_service"
-    elif eta_seconds <= 60:
-        status = "approaching"
     elif eta_seconds <= 30:
         status = "departure"
+    elif eta_seconds <= 60:
+        status = "approaching"
     else:
         status = "in_transit"
 
@@ -91,7 +94,7 @@ def _parse_bus_eta(raw: dict | None, route: str, stop: str) -> BusEtaResponse:
         eta_seconds=eta_seconds,
         plate_number=raw.get("PlateNumb"),
         status=status,
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
 
 
@@ -107,17 +110,13 @@ async def get_mrt_eta(r: redis.Redis, db: AsyncSession, station_name: str) -> Mr
         return MrtEtaResponse.model_validate(cached)
 
     # 先用 name → 查 DB 拿 station_id (TDX API 需要 station_id)
-    stmt = (
-        MrtStation.__table__.select()
-        .where(MrtStation.name == station_name)
-        .limit(1)
-    )
+    stmt = MrtStation.__table__.select().where(MrtStation.name == station_name).limit(1)
     row = (await db.execute(stmt)).first()
     if row is None:
         return MrtEtaResponse(
             station_name=station_name,
             next_trains=[],
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
 
     station_id = row.tdx_station_id
@@ -136,7 +135,7 @@ async def get_mrt_eta(r: redis.Redis, db: AsyncSession, station_name: str) -> Mr
     result = MrtEtaResponse(
         station_name=station_name,
         next_trains=trains,
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
     await cache_set_json(r, key, result.model_dump(mode="json"), ttl_seconds=MRT_ETA_TTL)
     return result
@@ -150,7 +149,7 @@ async def nearest_youbike(
     db: AsyncSession,
     lat: float,
     lon: float,
-    return_type: str,        # "rent" (找車) / "return" (還車)
+    return_type: str,  # "rent" (找車) / "return" (還車)
     limit: int = 5,
 ) -> list[YoubikeStationResponse]:
     """
@@ -169,9 +168,8 @@ async def nearest_youbike(
     # - ST_DWithin(..., 3000) 先用 3 公里圓圈過濾 (會吃 GIST 索引，非常快)
     # - ST_Distance(...) 用 geography 算出真實公尺距離
     # - <-> 是 PostGIS 的 KNN 操作符，依距離排序時超快
-    stmt = (
-        text(
-            """
+    stmt = text(
+        """
             SELECT id, tdx_station_id, name, bike_type, address,
                    ST_Y(location::geometry) AS lat,
                    ST_X(location::geometry) AS lon,
@@ -185,7 +183,6 @@ async def nearest_youbike(
             ORDER BY distance_m
             LIMIT :limit
             """
-        )
     )
     rows = (await db.execute(stmt, {"lat": lat, "lon": lon, "limit": limit * 2})).mappings().all()
 

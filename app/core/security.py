@@ -4,8 +4,9 @@
 - 密碼：用 bcrypt 雜湊，絕對不存明文
 - Token：用 HS256 簽名的 JWT，claim 裡放 user_id 與 token 類型 (access/refresh)
 """
-from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional
+
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 from uuid import UUID
 
 import bcrypt
@@ -13,8 +14,8 @@ from jose import JWTError, jwt
 
 from app.core.config import settings
 
-
 # ---------- 密碼雜湊 ----------
+
 
 def hash_password(plain: str) -> str:
     """把明文密碼轉成 bcrypt 雜湊，只在 register 時用。"""
@@ -36,7 +37,7 @@ TokenType = Literal["access", "refresh"]
 def create_token(
     user_id: UUID,
     token_type: TokenType,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """
     簽發一張 JWT。
@@ -51,7 +52,7 @@ def create_token(
         else:
             expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "type": token_type,

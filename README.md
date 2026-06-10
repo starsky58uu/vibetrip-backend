@@ -43,6 +43,7 @@ app/
 │   ├── config.py                 #   環境變數集中處
 │   ├── database.py               #   PostgreSQL 連線
 │   ├── redis_client.py           #   Redis 連線 + key 工具
+│   ├── health.py                 #   DB / Redis 存活檢查
 │   ├── security.py               #   密碼 hash + JWT
 │   └── deps.py                   #   FastAPI 依賴 (get_current_user)
 ├── db/
@@ -54,14 +55,16 @@ app/
 │   │   └── transit.py            #   BusStop / MrtStation / YoubikeStation (PostGIS)
 │   └── init_db.py                #   建表 + seed
 ├── schemas/                      # Pydantic I/O schemas
-├── services/                     # 業務邏輯
+├── services/                     # 業務邏輯（見 docs/CONVENTIONS.md）
 │   ├── auth_service.py
-│   ├── trip_service.py
+│   ├── trip_service.py           #   盲盒推薦（AI 失敗時 fallback DB）
+│   ├── ai_service.py             #   Groq + Google 行程生成
+│   ├── taste_service.py          #   足跡口味分析
 │   ├── weather_service.py        #   OWM + Redis 快取
 │   ├── places_service.py         #   Google + Redis 快取
 │   ├── transit_service.py        #   PostGIS + Redis (最典型的分工示範)
 │   ├── spot_service.py           #   PostGIS 足跡
-│   └── external/                 #   外部 API 薄包裝
+│   └── external/                 #   外部 API 薄包裝（只打 HTTP，不快取）
 │       ├── tdx_client.py
 │       ├── owm_client.py
 │       └── google_client.py
@@ -76,6 +79,8 @@ app/
 ```
 
 API 完整規格詳見 [docs/API.md](docs/API.md)。
+
+**寫 code 前請先讀** [docs/CONVENTIONS.md](docs/CONVENTIONS.md) — 分層、命名、import、日誌、快取等統一慣例。
 
 ---
 
@@ -102,6 +107,16 @@ docker compose up --build
 ### 3. 開啟 Swagger
 
 瀏覽器打開 <http://localhost:8000/docs>，可以直接試所有端點。
+
+### 開發：程式風格檢查
+
+```bash
+pip install -r requirements-dev.txt
+python -m ruff check app seed_spots.py --fix   # lint
+python -m ruff format app seed_spots.py        # 排版
+```
+
+規則見 [docs/CONVENTIONS.md](docs/CONVENTIONS.md)。推送 PR 時 GitHub Actions 會自動跑。
 
 ### 4. 透過 Cloudflare Tunnel 對外（可選）
 

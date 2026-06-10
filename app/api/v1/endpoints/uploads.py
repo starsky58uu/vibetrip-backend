@@ -1,13 +1,15 @@
 """圖片上傳端點 — 供 AR 足跡儲存使用。"""
+
+import uuid
 from pathlib import Path
 from typing import Annotated
-import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.models.user import User
+from app.schemas.common import UploadResponse
 
 router = APIRouter()
 
@@ -15,12 +17,12 @@ _ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/h
 _MAX_BYTES = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
-@router.post("/image")
+@router.post("/image", response_model=UploadResponse)
 async def upload_image(
     request: Request,
     file: Annotated[UploadFile, File(...)],
     _user: Annotated[User, Depends(get_current_user)],
-) -> dict:
+) -> UploadResponse:
     """
     上傳單張圖片（multipart/form-data），回傳可公開存取的 image_url。
 
@@ -68,5 +70,4 @@ async def upload_image(
         # 動態從請求取得 scheme+host（例如 http://10.56.60.215:8000）
         base = f"{request.url.scheme}://{request.url.netloc}/static/uploads"
 
-    image_url = f"{base}/{filename}"
-    return {"image_url": image_url}
+    return UploadResponse(image_url=f"{base}/{filename}")

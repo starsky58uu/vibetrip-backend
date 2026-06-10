@@ -8,7 +8,8 @@
 
 這是最典型的「動態資料放 Redis」範例。
 """
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 import redis.asyncio as redis
 
@@ -21,9 +22,8 @@ from app.schemas.weather import (
 )
 from app.services.external.owm_client import OpenWeatherMapClient
 
-
-CURRENT_TTL = 10 * 60      # 10 分鐘
-FORECAST_TTL = 30 * 60     # 30 分鐘
+CURRENT_TTL = 10 * 60  # 10 分鐘
+FORECAST_TTL = 30 * 60  # 30 分鐘
 
 
 async def get_current(r: redis.Redis, lat: float, lon: float) -> CurrentWeatherResponse:
@@ -49,7 +49,7 @@ async def get_current(r: redis.Redis, lat: float, lon: float) -> CurrentWeatherR
         humidity=main.get("humidity", 0),
         wind_speed=wind.get("speed", 0.0),
         pressure=main.get("pressure", 0),
-        observed_at=datetime.now(timezone.utc),
+        observed_at=datetime.now(UTC),
         district=raw.get("name"),
         greeting=_build_greeting(weather.get("main", ""), datetime.now().hour),
     )
@@ -71,7 +71,7 @@ async def get_forecast(r: redis.Redis, lat: float, lon: float) -> ForecastRespon
     # 整理每小時資料
     hourly = [
         HourlyForecast(
-            time=datetime.fromtimestamp(item["dt"], tz=timezone.utc),
+            time=datetime.fromtimestamp(item["dt"], tz=UTC),
             temperature=item["main"]["temp"],
             condition=item["weather"][0]["main"],
             icon=item["weather"][0]["icon"],
@@ -110,11 +110,15 @@ async def get_forecast(r: redis.Redis, lat: float, lon: float) -> ForecastRespon
 def _build_greeting(condition: str, hour: int) -> str:
     """產生首頁的招呼語 (取代前端的 greetingMessage 邏輯)。"""
     time_label = (
-        "清晨" if 5 <= hour < 9 else
-        "早安" if 9 <= hour < 12 else
-        "午安" if 12 <= hour < 17 else
-        "傍晚" if 17 <= hour < 19 else
-        "晚安"
+        "清晨"
+        if 5 <= hour < 9
+        else "早安"
+        if 9 <= hour < 12
+        else "午安"
+        if 12 <= hour < 17
+        else "傍晚"
+        if 17 <= hour < 19
+        else "晚安"
     )
 
     weather_hint = {

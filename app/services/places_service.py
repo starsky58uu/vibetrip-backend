@@ -3,12 +3,12 @@ Google Places 代理服務。
 
 快取：同樣條件 (座標+類別+半徑) 1 小時內重複打直接回 Redis。
 """
+
 import redis.asyncio as redis
 
 from app.core.redis_client import build_key, cache_get_json, cache_set_json
 from app.schemas.places import PlaceCategory, PlaceResponse
 from app.services.external.google_client import GoogleMapsClient
-
 
 CACHE_TTL = 60 * 60
 
@@ -18,7 +18,7 @@ CATEGORY_TO_GOOGLE_TYPE = {
     "convenience_store": "convenience_store",
     "cafe": "cafe",
     "restaurant": "restaurant",
-    "drink_shop": "cafe",   # Google 沒「飲料店」類別，用 cafe 近似
+    "drink_shop": "cafe",  # Google 沒「飲料店」類別，用 cafe 近似
 }
 
 
@@ -40,7 +40,10 @@ async def nearby(
     places = [_map_place(item, origin=(lat, lon)) for item in raw]
 
     await cache_set_json(
-        r, key, [p.model_dump(mode="json") for p in places], ttl_seconds=CACHE_TTL,
+        r,
+        key,
+        [p.model_dump(mode="json") for p in places],
+        ttl_seconds=CACHE_TTL,
     )
     return places
 
@@ -63,7 +66,10 @@ async def text_search(
     places = [_map_place(item, origin=origin) for item in raw]
 
     await cache_set_json(
-        r, key, [p.model_dump(mode="json") for p in places], ttl_seconds=30 * 60,
+        r,
+        key,
+        [p.model_dump(mode="json") for p in places],
+        ttl_seconds=30 * 60,
     )
     return places
 

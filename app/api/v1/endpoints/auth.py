@@ -1,4 +1,5 @@
-"""認證相關端點 — register / login / refresh / logout。"""
+"""認證端點 — register / login / refresh。"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends

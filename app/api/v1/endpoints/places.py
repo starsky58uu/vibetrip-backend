@@ -1,8 +1,9 @@
 """地點搜尋端點 — 代理 Google Places。"""
+
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
 import redis.asyncio as redis
+from fastapi import APIRouter, Depends, Query
 
 from app.core.redis_client import get_redis
 from app.schemas.places import PlaceCategory, PlaceListResponse

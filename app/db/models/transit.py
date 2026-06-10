@@ -11,7 +11,8 @@
 資料來源：TDX 平台。
 → 我們會寫個定期任務 (或手動一次性) 從 TDX 抓下來 seed 進這些 table。
 """
-from typing import Optional,Any
+
+from typing import Any
 
 from geoalchemy2 import Geography
 from sqlalchemy import Index, Integer, String
@@ -80,7 +81,7 @@ class YoubikeStation(Base, UUIDPrimaryKey, TimestampMixin):
     total_slots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # 站點地址 (給使用者看的)
-    address: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     location: Mapped[Any] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=True),

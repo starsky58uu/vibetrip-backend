@@ -8,12 +8,12 @@ API docs: https://openweathermap.org/api
 
 這裡只負責「打 API」，快取與聚合邏輯寫在 services/weather_service.py。
 """
+
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
-
 
 OWM_BASE = "https://api.openweathermap.org/data/2.5"
 
@@ -35,7 +35,7 @@ class OpenWeatherMapClient:
             f"{OWM_BASE}{path}",
             params={
                 "appid": settings.OPENWEATHER_API_KEY,
-                "units": "metric",       # 攝氏
+                "units": "metric",  # 攝氏
                 "lang": "zh_tw",
                 **params,
             },

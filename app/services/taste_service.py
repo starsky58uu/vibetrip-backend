@@ -12,6 +12,7 @@ AI 口味分析服務 — 解讀使用者的城市漫遊個性。
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -20,18 +21,26 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.redis_client import get_redis
+from app.core.redis_client import build_key, cache_get_json, cache_set_json, get_redis
 from app.db.models.spot import PersonalSpot
 
-_CACHE_TTL = 12 * 3600          # 12 小時
-_MIN_SPOTS  = 3                  # 至少要幾筆足跡才分析
+logger = logging.getLogger(__name__)
+
+_CACHE_TTL = 12 * 3600  # 12 小時
+_MIN_SPOTS = 3  # 至少要幾筆足跡才分析
 _VIBE_OPTIONS = [
-    "Café Drift", "Hungry Mood", "Photo Hunt",
-    "Rain Shelter", "Slow Walk", "Tiny Gift", "Surprise Me",
+    "Café Drift",
+    "Hungry Mood",
+    "Photo Hunt",
+    "Rain Shelter",
+    "Slow Walk",
+    "Tiny Gift",
+    "Surprise Me",
 ]
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 async def get_taste_profile(
     db: AsyncSession,
@@ -42,13 +51,13 @@ async def get_taste_profile(
     取得使用者 AI 口味分析。
     refresh=True 時強制重新呼叫 Groq，否則優先讀快取。
     """
-    cache_key = f"taste:profile:{user_id}"
+    cache_key = build_key("taste", "profile", user_id)
 
     if not refresh:
         redis = await get_redis()
-        cached = await redis.get(cache_key)
-        if cached:
-            return json.loads(cached)
+        cached = await cache_get_json(redis, cache_key)
+        if cached is not None:
+            return cached
 
     # 讀足跡
     result_proxy = await db.execute(
@@ -64,14 +73,14 @@ async def get_taste_profile(
     else:
         profile = await _generate_with_groq(spots)
 
-    # 寫快取
     redis = await get_redis()
-    await redis.setex(cache_key, _CACHE_TTL, json.dumps(profile, ensure_ascii=False))
+    await cache_set_json(redis, cache_key, profile, ttl_seconds=_CACHE_TTL)
 
     return profile
 
 
 # ── 私有 helpers ──────────────────────────────────────────────────────────────
+
 
 def _sparse_profile(count: int) -> dict:
     """足跡太少時回傳引導文案，不呼叫 AI。"""
@@ -88,12 +97,17 @@ def _sparse_profile(count: int) -> dict:
 
 
 def _classify_hour(h: int) -> str:
-    if   6  <= h < 10: return "清晨(06-10)"
-    elif 10 <= h < 12: return "上午(10-12)"
-    elif 12 <= h < 18: return "下午(12-18)"
-    elif 18 <= h < 20: return "傍晚(18-20)"
-    elif 20 <= h < 24: return "夜晚(20-00)"
-    else:               return "深夜(00-06)"
+    if 6 <= h < 10:
+        return "清晨(06-10)"
+    if 10 <= h < 12:
+        return "上午(10-12)"
+    if 12 <= h < 18:
+        return "下午(12-18)"
+    if 18 <= h < 20:
+        return "傍晚(18-20)"
+    if 20 <= h < 24:
+        return "夜晚(20-00)"
+    return "深夜(00-06)"
 
 
 async def _generate_with_groq(spots: list[PersonalSpot]) -> dict:
@@ -118,13 +132,10 @@ async def _generate_with_groq(spots: list[PersonalSpot]) -> dict:
 
     # 排序取最多的時段
     sorted_slots = sorted(hour_buckets, key=hour_buckets.get, reverse=True)
-    top_time  = sorted_slots[0] if sorted_slots else "下午(12-18)"
-    sec_time  = sorted_slots[1] if len(sorted_slots) > 1 else top_time
+    top_time = sorted_slots[0] if sorted_slots else "下午(12-18)"
+    sec_time = sorted_slots[1] if len(sorted_slots) > 1 else top_time
 
-    notes_block = (
-        "\n".join(f"- {n}" for n in notes[:15])
-        if notes else "（用戶沒有留下文字備注）"
-    )
+    notes_block = "\n".join(f"- {n}" for n in notes[:15]) if notes else "（用戶沒有留下文字備注）"
     hour_summary = "、".join(
         f"{k}×{v}" for k, v in sorted(hour_buckets.items(), key=lambda x: -x[1])
     )
@@ -176,11 +187,12 @@ async def _generate_with_groq(spots: list[PersonalSpot]) -> dict:
     except json.JSONDecodeError:
         # 防呆：Groq 偶爾會在 JSON 前後加多餘文字
         import re
-        m = re.search(r'\{.*\}', raw, re.DOTALL)
+
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
         result = json.loads(m.group(0)) if m else {}
 
     # 補充元資料
-    result["generated"]   = True
+    result["generated"] = True
     result["spots_count"] = len(spots)
 
     # 確保 tags / top_vibes 是陣列
@@ -189,6 +201,9 @@ async def _generate_with_groq(spots: list[PersonalSpot]) -> dict:
     if not isinstance(result.get("top_vibes"), list):
         result["top_vibes"] = []
 
-    print(f"[taste] user generated: {result.get('roaming_style','?')} "
-          f"({len(spots)} spots)", flush=True)
+    logger.info(
+        "口味分析完成: %s (%d spots)",
+        result.get("roaming_style", "?"),
+        len(spots),
+    )
     return result

@@ -1,5 +1,6 @@
 """使用者自身資料端點。"""
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -10,6 +11,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.db.models.spot import PersonalSpot, SpotSave
 from app.db.models.user import User
+from app.schemas.common import UserStatsResponse
 from app.schemas.user import UserResponse, UserUpdateRequest
 
 router = APIRouter()
@@ -21,30 +23,36 @@ async def get_me(user: Annotated[User, Depends(get_current_user)]) -> UserRespon
     return UserResponse.model_validate(user)
 
 
-@router.get("/me/stats")
+@router.get("/me/stats", response_model=UserStatsResponse)
 async def get_me_stats(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
+) -> UserStatsResponse:
     """取得使用者統計數字：足跡數、收藏數、加入天數。"""
-    spots_count = await db.scalar(
-        select(func.count()).select_from(PersonalSpot).where(PersonalSpot.owner_id == user.id)
-    ) or 0
+    spots_count = (
+        await db.scalar(
+            select(func.count()).select_from(PersonalSpot).where(PersonalSpot.owner_id == user.id)
+        )
+        or 0
+    )
 
-    saved_count = await db.scalar(
-        select(func.count()).select_from(SpotSave).where(SpotSave.user_id == user.id)
-    ) or 0
+    saved_count = (
+        await db.scalar(
+            select(func.count()).select_from(SpotSave).where(SpotSave.user_id == user.id)
+        )
+        or 0
+    )
 
     created = user.created_at
     if created and created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
-    days = (datetime.now(timezone.utc) - created).days if created else 0
+        created = created.replace(tzinfo=UTC)
+    days = (datetime.now(UTC) - created).days if created else 0
 
-    return {
-        "spots_count": spots_count,
-        "saved_count": saved_count,
-        "days": days,
-    }
+    return UserStatsResponse(
+        spots_count=spots_count,
+        saved_count=saved_count,
+        days=days,
+    )
 
 
 @router.patch("/me", response_model=UserResponse)

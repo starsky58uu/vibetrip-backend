@@ -1,0 +1,3 @@
+# 開發 / CI 用 — 不裝進 production Docker image
+-r requirements.txt
+ruff>=0.8.0

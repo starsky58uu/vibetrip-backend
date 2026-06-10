@@ -1,5 +1,6 @@
 """足跡端點 — 個人 + 社群。"""
-from typing import Annotated, Literal, Optional
+
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -79,7 +80,7 @@ async def list_saved(
 @router.get("/community", response_model=list[CommunitySpotResponse])
 async def list_community(
     db: Annotated[AsyncSession, Depends(get_db)],
-    viewer: Annotated[Optional[User], Depends(get_optional_user)],
+    viewer: Annotated[User | None, Depends(get_optional_user)],
     sort: Annotated[Literal["recent", "popular", "nearby"], Query()] = "recent",
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     lon: Annotated[float | None, Query(ge=-180, le=180)] = None,

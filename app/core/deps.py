@@ -8,7 +8,8 @@ FastAPI 依賴注入集中處。
 
 這些依賴最常用的就是「取目前登入的使用者」。
 """
-from typing import Annotated, Optional
+
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -21,7 +22,6 @@ from app.core.database import get_db
 from app.core.security import decode_token
 from app.db.models.user import User
 
-
 # tokenUrl：Swagger UI 用，指到我們的 login endpoint
 # auto_error=False：讓我們能做「選擇性登入」(公開端點也能看使用者資料)
 oauth2_scheme = OAuth2PasswordBearer(
@@ -31,7 +31,7 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 
 async def get_current_user(
-    token: Annotated[Optional[str], Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """
@@ -50,7 +50,7 @@ async def get_current_user(
     try:
         user_id: UUID = decode_token(token, expected_type="access")
     except JWTError:
-        raise credentials_exception
+        raise credentials_exception from None
 
     user = await db.get(User, user_id)
     if user is None:
@@ -60,9 +60,9 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    token: Annotated[Optional[str], Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> Optional[User]:
+) -> User | None:
     """
     選擇性登入 (用在社群地標這類公開列表端點)：
     - 有 token 且有效：回使用者，可用於填 viewer_state.is_liked
