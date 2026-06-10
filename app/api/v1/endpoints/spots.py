@@ -11,6 +11,7 @@ from app.core.deps import get_current_user, get_optional_user
 from app.db.models.user import User
 from app.schemas.spot import (
     CommunitySpotResponse,
+    PaginatedCommunitySpotsResponse,
     PersonalSpotCreateRequest,
     PersonalSpotResponse,
     PersonalSpotUpdateRequest,
@@ -77,7 +78,7 @@ async def list_saved(
     return await spot_service.list_saved_spots(db, user)
 
 
-@router.get("/community", response_model=list[CommunitySpotResponse])
+@router.get("/community", response_model=PaginatedCommunitySpotsResponse)
 async def list_community(
     db: Annotated[AsyncSession, Depends(get_db)],
     viewer: Annotated[User | None, Depends(get_optional_user)],
@@ -85,9 +86,10 @@ async def list_community(
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
-) -> list[CommunitySpotResponse]:
-    """瀏覽社群地標。匿名也能看，登入的話會填入 is_liked / is_saved。"""
-    return await spot_service.list_community_spots(db, viewer, sort, lat, lon, limit)
+    cursor: Annotated[str | None, Query()] = None,
+) -> PaginatedCommunitySpotsResponse:
+    """瀏覽社群地標（cursor 分頁）。匿名也能看，登入的話會填入 is_liked / is_saved。"""
+    return await spot_service.list_community_spots(db, viewer, sort, lat, lon, limit, cursor)
 
 
 @router.post("/community/{spot_id}/like", response_model=ToggleLikeResponse)

@@ -26,6 +26,40 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:15-3.3-alpine
+        env:
+          POSTGRES_USER: tdx_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: tdx_database
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tdx_user -d tdx_database"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DEBUG: "true"
+      JWT_SECRET_KEY: pytest-ci-secret-key
+      RATE_LIMIT_ENABLED: "false"
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: tdx_user
+      DB_PASSWORD: test_password
+      DB_NAME: tdx_database
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +71,4 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: pytest
-        run: pytest -v
-        env:
-          DEBUG: "true"
-          JWT_SECRET_KEY: pytest-ci-secret-key
+        run: pytest -v --cov=app --cov-report=term-missing

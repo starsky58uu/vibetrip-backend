@@ -8,6 +8,16 @@ requires-python = ">=3.11"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: requires PostgreSQL and Redis (skipped when unavailable)",
+]
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 48
+show_missing = true
 
 [tool.ruff]
 target-version = "py311"
@@ -29,7 +39,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # 長 prompt、SQL、seed 文案常超過 100 字 — 可讀性優先於強制換行
-"app/services/ai_service.py" = ["E501"]
+"app/services/ai/groq.py" = ["E501"]
 "app/services/transit_service.py" = ["E501"]
 "seed_spots.py" = ["E501"]
 

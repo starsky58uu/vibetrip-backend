@@ -41,5 +41,11 @@ async def refresh(
     req: RefreshRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AccessTokenResponse:
-    """用 refresh_token 換新的 access_token。"""
+    """用 refresh_token 換新的 access_token（含 refresh rotation）。"""
     return await auth_service.refresh_access_token(db, req)
+
+
+@router.post("/logout", status_code=204)
+async def logout(req: RefreshRequest) -> None:
+    """撤銷 refresh token。"""
+    await auth_service.logout_user(req)

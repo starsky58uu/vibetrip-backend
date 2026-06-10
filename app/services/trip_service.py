@@ -54,7 +54,12 @@ async def recommend(db: AsyncSession, req: RecommendRequest) -> TripPlanResponse
 
 
 async def get_trip(db: AsyncSession, trip_id: UUID) -> TripPlanResponse:
-    """取得單一行程 (分享、歷史查詢用)。"""
+    """
+    取得單一行程（分享、歷史查詢用）。
+
+    僅回傳 DB 中的 TripTemplate（seed 模板）。
+    POST /trips/recommend 由 AI 產生的行程 ID 不會寫入 DB，因此無法用此端點查詢。
+    """
     template = await db.get(TripTemplate, trip_id)
     if template is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="行程不存在")

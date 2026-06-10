@@ -13,10 +13,13 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.pagination import decode_cursor, encode_cursor
 from app.db.models.spot import CommunitySpot, PersonalSpot, SpotLike, SpotSave
 from app.db.models.user import User
 from app.schemas.spot import (
     CommunitySpotResponse,
+    CursorPagination,
+    PaginatedCommunitySpotsResponse,
     PersonalSpotCreateRequest,
     PersonalSpotResponse,
     PersonalSpotUpdateRequest,
@@ -200,16 +203,82 @@ async def list_community_spots(
     lat: float | None = None,
     lon: float | None = None,
     limit: int = 20,
-) -> list[CommunitySpotResponse]:
-    order_clause = "ORDER BY cs.created_at DESC"
+    cursor: str | None = None,
+) -> PaginatedCommunitySpotsResponse:
+    fetch_limit = limit + 1
+    cursor_filter = ""
+    dist_select = ""
+
+    params: dict = {
+        "viewer_id": viewer.id if viewer else None,
+        "limit": fetch_limit,
+        "lat": lat,
+        "lon": lon,
+    }
+
     if sort == "popular":
-        order_clause = "ORDER BY cs.likes_count DESC, cs.created_at DESC"
+        order_clause = "ORDER BY cs.likes_count DESC, cs.created_at DESC, cs.id DESC"
+        if cursor:
+            c = decode_cursor(cursor)
+            cursor_filter = (
+                "AND (cs.likes_count, cs.created_at, cs.id) < "
+                "(:c_likes, :c_created_at::timestamptz, :c_id::uuid)"
+            )
+            params.update(
+                {
+                    "c_likes": c["likes_count"],
+                    "c_created_at": c["created_at"],
+                    "c_id": c["id"],
+                }
+            )
     elif sort == "nearby":
         if lat is None or lon is None:
             raise HTTPException(status_code=400, detail="nearby 排序需提供 lat/lon")
-        order_clause = (
-            "ORDER BY cs.location <-> ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography"
+        dist_select = (
+            ", cs.location <-> ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography AS dist_m"
         )
+        order_clause = "ORDER BY dist_m ASC, cs.id ASC"
+        if cursor:
+            c = decode_cursor(cursor)
+            cursor_filter = "AND (dist_m, id) > (:c_dist_m, :c_id::uuid)"
+            params.update({"c_dist_m": c["dist_m"], "c_id": c["id"]})
+        inner_query = f"""
+        SELECT
+            cs.id, cs.content, cs.image_url, cs.likes_count, cs.saves_count, cs.created_at,
+            ST_Y(cs.location::geometry) AS lat,
+            ST_X(cs.location::geometry) AS lon,
+            u.id AS author_id, u.username, u.display_name, u.avatar_url,
+            CASE WHEN sl.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS is_liked,
+            CASE WHEN ss.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS is_saved
+            {dist_select}
+        FROM community_spots cs
+        JOIN users u ON u.id = cs.author_id
+        LEFT JOIN spot_likes sl ON sl.spot_id = cs.id AND sl.user_id = :viewer_id
+        LEFT JOIN spot_saves ss ON ss.spot_id = cs.id AND ss.user_id = :viewer_id
+        """
+        query = f"""
+        SELECT * FROM ({inner_query}) AS nearby_page
+        WHERE 1=1 {cursor_filter}
+        {order_clause}
+        LIMIT :limit
+        """
+        rows = (await db.execute(text(query), params)).mappings().all()
+        has_more = len(rows) > limit
+        page_rows = rows[:limit]
+        next_cursor = None
+        if has_more and page_rows:
+            last = page_rows[-1]
+            next_cursor = encode_cursor({"dist_m": last["dist_m"], "id": str(last["id"])})
+        return PaginatedCommunitySpotsResponse(
+            data=[_row_to_community(r) for r in page_rows],
+            pagination=CursorPagination(next_cursor=next_cursor, has_more=has_more),
+        )
+    else:
+        order_clause = "ORDER BY cs.created_at DESC, cs.id DESC"
+        if cursor:
+            c = decode_cursor(cursor)
+            cursor_filter = "AND (cs.created_at, cs.id) < (:c_created_at::timestamptz, :c_id::uuid)"
+            params.update({"c_created_at": c["created_at"], "c_id": c["id"]})
 
     query = f"""
         SELECT
@@ -219,21 +288,39 @@ async def list_community_spots(
             u.id AS author_id, u.username, u.display_name, u.avatar_url,
             CASE WHEN sl.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS is_liked,
             CASE WHEN ss.user_id IS NOT NULL THEN TRUE ELSE FALSE END AS is_saved
+            {dist_select}
         FROM community_spots cs
         JOIN users u ON u.id = cs.author_id
         LEFT JOIN spot_likes sl ON sl.spot_id = cs.id AND sl.user_id = :viewer_id
         LEFT JOIN spot_saves ss ON ss.spot_id = cs.id AND ss.user_id = :viewer_id
+        WHERE 1=1 {cursor_filter}
         {order_clause}
         LIMIT :limit
     """
-    params = {
-        "viewer_id": viewer.id if viewer else None,
-        "limit": limit,
-        "lat": lat,
-        "lon": lon,
-    }
     rows = (await db.execute(text(query), params)).mappings().all()
-    return [_row_to_community(r) for r in rows]
+    has_more = len(rows) > limit
+    page_rows = rows[:limit]
+
+    next_cursor = None
+    if has_more and page_rows:
+        last = page_rows[-1]
+        if sort == "popular":
+            next_cursor = encode_cursor(
+                {
+                    "likes_count": last["likes_count"],
+                    "created_at": last["created_at"],
+                    "id": str(last["id"]),
+                }
+            )
+        elif sort == "nearby":
+            next_cursor = encode_cursor({"dist_m": last["dist_m"], "id": str(last["id"])})
+        else:
+            next_cursor = encode_cursor({"created_at": last["created_at"], "id": str(last["id"])})
+
+    return PaginatedCommunitySpotsResponse(
+        data=[_row_to_community(r) for r in page_rows],
+        pagination=CursorPagination(next_cursor=next_cursor, has_more=has_more),
+    )
 
 
 async def list_saved_spots(db: AsyncSession, viewer: User) -> list[CommunitySpotResponse]:

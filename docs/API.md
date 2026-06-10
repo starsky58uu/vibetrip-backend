@@ -331,8 +331,14 @@ GET /spots/community?limit=20&cursor=eyJjcmVhdGVkX2F0...
 **Response 200**
 
 ```json
-{ "access_token": "...", "expires_in": 3600 }
+{
+  "access_token": "...",
+  "refresh_token": "...",
+  "expires_in": 3600
+}
 ```
+
+每次 refresh 會簽發新的 refresh_token（rotation），舊 token 立即失效。
 
 ---
 
@@ -400,6 +406,8 @@ GET /spots/community?limit=20&cursor=eyJjcmVhdGVkX2F0...
 #### `GET /trips/{trip_id}`
 
 取得某次盲盒結果（供分享、歷史查詢）。**Response 200**：`TripPlan` 物件。
+
+**限制**：此端點僅能查詢 **DB 中的 `TripTemplate`（seed 模板）**。`POST /trips/recommend` 由 AI 即時產生的行程會回傳新的 UUID，但**不會寫入資料庫**；對這類 ID 呼叫本端點將回 **404**。若需分享 AI 行程，請在前端保存完整 `TripPlan` JSON，或等待未來的持久化 API（見 ROADMAP）。
 
 ---
 

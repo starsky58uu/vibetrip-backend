@@ -32,8 +32,9 @@ class TokenResponse(BaseModel):
 
 
 class AccessTokenResponse(BaseModel):
-    """refresh 端點只回新的 access_token。"""
+    """refresh 端點回新的 access_token；rotation 時一併回傳新 refresh_token。"""
 
     access_token: str
     expires_in: int
     token_type: str = "Bearer"
+    refresh_token: str | None = None

@@ -30,20 +30,20 @@
 - [x] pre-commit hooks
 - [x] GitHub Actions lint
 
-## P3 — 測試與擴展 🚧
+## P3 — 測試與擴展 ✅
 
 - [x] pytest 單元測試（security、trip、transit、AI 驗證）
 - [x] API smoke tests（root、healthz，mock 依賴）
 - [x] CI 跑 pytest
 - [x] [docs/TESTING.md](TESTING.md) — 測試政策（新功能必附測試、給 LLM 的指引）
-- [ ] CI 覆蓋率門檻（`pytest-cov` + `--cov-fail-under`）
-- [ ] 整合測試（需 Docker DB/Redis）
+- [x] CI 覆蓋率門檻（`pytest-cov` + `--cov-fail-under=48`）
+- [x] 整合測試（CI 用 PostgreSQL + Redis service containers）
 - [x] Alembic migrations（見 [MIGRATIONS.md](MIGRATIONS.md)）
-- [ ] 拆分 `ai_service.py`
+- [x] 拆分 `ai_service.py` → `app/services/ai/`
 - [x] Rate limiting（`/trips/recommend`、`/uploads/image` — Redis 固定視窗）
-- [ ] 社群 feed 分頁
-- [ ] Refresh token rotation
-- [ ] AI 行程持久化或明確文件化 `GET /trips/{id}` 限制
+- [x] 社群 feed 分頁（cursor-based）
+- [x] Refresh token rotation（Redis + `POST /auth/logout`）
+- [x] 明確文件化 `GET /trips/{id}` 限制（見 [API.md](API.md)）
 
 ---
 

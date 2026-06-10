@@ -7,7 +7,7 @@
 
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import bcrypt
 from jose import JWTError, jwt
@@ -38,6 +38,7 @@ def create_token(
     user_id: UUID,
     token_type: TokenType,
     expires_delta: timedelta | None = None,
+    jti: str | None = None,
 ) -> str:
     """
     簽發一張 JWT。
@@ -53,20 +54,19 @@ def create_token(
             expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
     now = datetime.now(UTC)
+    token_jti = jti or str(uuid4())
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "type": token_type,
+        "jti": token_jti,
         "iat": now,
         "exp": now + expires_delta,
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def decode_token(token: str, expected_type: TokenType) -> UUID:
-    """
-    驗證並解析 JWT，回傳 user_id。
-    若過期、篡改、type 不符 → 拋 JWTError (由上層轉成 401)。
-    """
+def decode_token_jti(token: str, expected_type: TokenType) -> tuple[UUID, str]:
+    """驗證 JWT 並回傳 (user_id, jti)。"""
     try:
         payload = jwt.decode(
             token,
@@ -79,11 +79,24 @@ def decode_token(token: str, expected_type: TokenType) -> UUID:
     if payload.get("type") != expected_type:
         raise JWTError(f"Token 類型不符，預期 {expected_type}")
 
+    jti = payload.get("jti")
+    if not jti:
+        raise JWTError("Token 缺少 jti 欄位")
+
     user_id_str = payload.get("sub")
     if user_id_str is None:
         raise JWTError("Token 缺少 sub 欄位")
 
     try:
-        return UUID(user_id_str)
+        return UUID(user_id_str), str(jti)
     except ValueError as e:
         raise JWTError(f"Token sub 不是有效的 UUID: {e}") from e
+
+
+def decode_token(token: str, expected_type: TokenType) -> UUID:
+    """
+    驗證並解析 JWT，回傳 user_id。
+    若過期、篡改、type 不符 → 拋 JWTError (由上層轉成 401)。
+    """
+    user_id, _jti = decode_token_jti(token, expected_type)
+    return user_id

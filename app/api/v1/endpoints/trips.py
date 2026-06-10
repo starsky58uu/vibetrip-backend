@@ -38,7 +38,7 @@ async def get_trip(
     trip_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TripPlanResponse:
-    """取單一行程 — 供分享 / 歷史查詢（僅 DB 模板；AI 行程 ID 不持久化）。"""
+    """取單一行程 — 僅 DB 模板；AI 產生的行程 ID 不持久化，請見 docs/API.md。"""
     return await trip_service.get_trip(db, trip_id)
 
 

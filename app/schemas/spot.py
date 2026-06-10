@@ -76,3 +76,13 @@ class ToggleLikeResponse(BaseModel):
 class ToggleSaveResponse(BaseModel):
     is_saved: bool
     saves_count: int
+
+
+class CursorPagination(BaseModel):
+    next_cursor: str | None = None
+    has_more: bool
+
+
+class PaginatedCommunitySpotsResponse(BaseModel):
+    data: list[CommunitySpotResponse]
+    pagination: CursorPagination

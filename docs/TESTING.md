@@ -12,7 +12,7 @@
 | **改舊 code 要跑全套** | `pytest -v` 全綠再 commit / 開 PR |
 | **先寫可測的 code** | 複雜邏輯放在 service 純函式，不要全塞在 endpoint |
 | **mock 外部依賴** | Groq、Google、TDX、Redis、DB 在單元測試中 mock，不要打真 API |
-| **整合測試可選但加分** | 需 Docker 的 full-stack 測試見下方「整合測試」— 尚未強制 |
+| **整合測試** | 需 Docker DB/Redis；CI 自動跑 | `tests/integration/`、`pytest -m integration` |
 
 ### 給 AI / LLM 助手
 
@@ -72,18 +72,16 @@ docker compose run --rm -e DEBUG=true -e JWT_SECRET_KEY=pytest-ci-secret-key api
 ```bash
 pytest tests/unit -v              # 只跑單元（快、不需 DB）
 pytest tests/api -v               # API smoke
+pytest -m integration -v          # 整合測試（需 docker compose db + redis）
 pytest tests/unit/test_security.py -v   # 單一檔案
 pytest -k "rainy" -v              # 名稱關鍵字過濾
 ```
 
-### 覆蓋率（建議本地跑，了解缺口）
+### 覆蓋率（CI 強制 ≥48%）
 
 ```bash
-pip install pytest-cov
 pytest --cov=app --cov-report=term-missing
 ```
-
-目標：**新改的模組盡量維持或提高覆蓋率**；全 repo 百分比門檻尚未在 CI 強制（見 ROADMAP）。
 
 ---
 
@@ -97,8 +95,13 @@ tests/
 │   test_trip_service.py
 │   test_transit_service.py
 │   test_ai_service.py
-└── api/                 # 透過 HTTP 打 FastAPI（依賴 mock）
-    test_system.py
+│   test_pagination.py
+│   test_auth_refresh.py
+├── api/                 # 透過 HTTP 打 FastAPI（依賴 mock）
+│   test_system.py
+└── integration/         # 真實 DB + Redis（本機需 docker compose）
+    test_auth_flow.py
+    test_trips_db.py
 ```
 
 命名：`test_<行為>_<條件>()`，例如 `test_rainy_walk_becomes_rain`。
@@ -131,7 +134,7 @@ async def test_recommend_falls_back_to_db(monkeypatch):
 GitHub Actions [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 在 push/PR 時自動：
 
 1. Ruff check + format
-2. `pytest -v`
+2. `pytest -v --cov=app --cov-report=term-missing`（含整合測試；覆蓋率門檻 48%）
 
 **本地與 CI 行為應一致**；合併前確認 Actions 全綠。
 
