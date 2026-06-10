@@ -127,6 +127,8 @@ docker compose run --rm -e DEBUG=true -e JWT_SECRET_KEY=pytest-ci-secret-key api
 
 **新功能必附測試** → [docs/TESTING.md](docs/TESTING.md)（含 AI 助手須知、PR 檢查清單）
 
+**Schema 變更** → [docs/MIGRATIONS.md](docs/MIGRATIONS.md)（Alembic）
+
 改進路線圖：[docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ### 4. 透過 Cloudflare Tunnel 對外（可選）

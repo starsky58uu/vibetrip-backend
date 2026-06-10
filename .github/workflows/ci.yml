@@ -19,10 +19,10 @@ jobs:
         run: pip install ruff
 
       - name: Ruff check
-        run: ruff check app seed_spots.py tests
+        run: ruff check app alembic seed_spots.py tests
 
       - name: Ruff format
-        run: ruff format --check app seed_spots.py tests
+        run: ruff format --check app alembic seed_spots.py tests
 
   test:
     runs-on: ubuntu-latest

@@ -2,13 +2,10 @@
 資料庫初始化 & seed。
 
 流程：
-1. CREATE EXTENSION postgis — 啟用地理空間功能 (第一次部署必做)
-2. 依據 models/*.py 裡的定義建所有 table
-3. 塞入盲盒行程 seed 資料 (從前端 mockData.js 搬過來)
+1. Alembic upgrade head（PostGIS + 所有 table，見 alembic/versions/）
+2. 塞入盲盒行程 seed 資料（僅空表時）
 
-呼叫時機：
-- 開發時，docker compose up 後執行一次 `python -m app.db.init_db`
-- 正式環境建議改用 Alembic migration
+手動：`python -m app.db.init_db` 或 `alembic upgrade head`
 """
 
 import asyncio
@@ -16,9 +13,9 @@ import logging
 
 from sqlalchemy import text
 
-from app.core.database import AsyncSessionLocal, engine
-from app.db.base import Base
-from app.db.models import TripItem, TripTemplate  # noqa: F401 — import 讓 metadata 認得 model
+from app.core.database import AsyncSessionLocal
+from app.db.migrate import run_migrations
+from app.db.models import TripItem, TripTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -514,37 +511,11 @@ SEED_TRIPS: list[dict] = [
 
 
 async def init_db() -> None:
-    """建表 + seed。可重複執行，不會重複塞資料 (前會先檢查)。"""
+    """Alembic migrate + seed。可重複執行，不會重複塞資料。"""
 
-    # 1. 啟用 PostGIS 擴充
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
-        logger.info("PostGIS 擴充已啟用")
+    await run_migrations()
 
-        await conn.run_sync(Base.metadata.create_all)
-        logger.info("所有資料表已建立")
-
-        # 既有 DB 補欄位（create_all 不會 ALTER 舊表）
-        await conn.execute(
-            text(
-                """
-                ALTER TABLE community_spots
-                ADD COLUMN IF NOT EXISTS personal_spot_id UUID
-                REFERENCES personal_spots(id) ON DELETE CASCADE
-                """
-            )
-        )
-        await conn.execute(
-            text(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS uq_community_spots_personal_spot_id
-                ON community_spots (personal_spot_id)
-                WHERE personal_spot_id IS NOT NULL
-                """
-            )
-        )
-
-    # 3. Seed 盲盒行程 (只在空表時塞)
+    # Seed 盲盒行程 (只在空表時塞)
     async with AsyncSessionLocal() as session:
         existing = await session.execute(text("SELECT COUNT(*) FROM trip_templates"))
         count = existing.scalar_one()

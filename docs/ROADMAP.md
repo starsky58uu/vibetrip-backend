@@ -38,7 +38,7 @@
 - [x] [docs/TESTING.md](TESTING.md) — 測試政策（新功能必附測試、給 LLM 的指引）
 - [ ] CI 覆蓋率門檻（`pytest-cov` + `--cov-fail-under`）
 - [ ] 整合測試（需 Docker DB/Redis）
-- [ ] Alembic migrations
+- [x] Alembic migrations（見 [MIGRATIONS.md](MIGRATIONS.md)）
 - [ ] 拆分 `ai_service.py`
 - [ ] Rate limiting（`/trips/recommend`、`/uploads/image`）
 - [ ] 社群 feed 分頁

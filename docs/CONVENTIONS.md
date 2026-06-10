@@ -95,7 +95,7 @@ API 路徑用 **複數名詞 + kebab 少見**：`/spots/personal`, `/trips/recom
 - 異步 session：`async with` / `await db.execute`
 - 需要座標時優先 **PostGIS SQL**，不要在 Python 迴圈算距離
 - 計數欄位（likes_count）用 **原子 UPDATE**，不要 read-modify-write
-- Schema 變更：長期用 Alembic；過渡期可在 `init_db` 加 `ADD COLUMN IF NOT EXISTS`
+- Schema 變更：用 Alembic（見 [MIGRATIONS.md](MIGRATIONS.md)），禁止在 `init_db` 手寫 `ALTER`
 
 ---
 
@@ -134,6 +134,7 @@ async def list_community(...) -> list[CommunitySpotResponse]:
 - [ ] `pytest -v` 全綠
 - [ ] Endpoint 薄包裝 + `response_model`
 - [ ] 若打外部 API → `external/` client + service 層快取
+- [ ] 若改 schema → Alembic migration（[MIGRATIONS.md](MIGRATIONS.md)）
 - [ ] 更新 `docs/API.md` 一筆
 - [ ] 敏感端點加 `Depends(get_current_user)`
 

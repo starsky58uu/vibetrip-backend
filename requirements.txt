@@ -17,6 +17,7 @@ httpx>=0.24.1
 asyncpg>=0.28.0
 SQLAlchemy>=2.0.0
 geoalchemy2>=0.14.0              # PostGIS 空間查詢支援
+alembic>=1.13.0                  # Schema migrations
 
 # ==========================================
 # 快取 (Redis)
