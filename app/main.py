@@ -54,6 +54,9 @@ app = FastAPI(
     description="專為 P 型旅人打造的即時盲盒行程 App 後端 API",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
 _upload_dir = Path(settings.UPLOAD_DIR)
@@ -73,11 +76,13 @@ app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/", tags=["系統"])
 def root() -> dict:
-    return {
+    body: dict = {
         "message": "Welcome to VibeTrip API! 🚀",
         "status": "running",
-        "docs": "/docs",
     }
+    if settings.DEBUG:
+        body["docs"] = "/docs"
+    return body
 
 
 @app.get("/healthz", tags=["系統"])

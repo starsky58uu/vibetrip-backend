@@ -1,0 +1,85 @@
+# 正式環境 — 無 --reload、不掛原始碼、不對外暴露 DB/Redis port
+#
+# 啟動：
+#   docker compose -f docker-compose.prod.yml --profile tunnel up -d --build
+#
+# 若 DB 密碼有變更且舊 volume 連不上，需先：
+#   docker compose -f docker-compose.prod.yml down -v
+
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+
+  db:
+    image: postgis/postgis:15-3.3-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-tdx_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-your_secure_password}
+      POSTGRES_DB: ${DB_NAME:-tdx_database}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tdx_user} -d ${DB_NAME:-tdx_database}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    env_file:
+      - .env
+    depends_on:
+      - api
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+  uploads_data:

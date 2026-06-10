@@ -19,7 +19,7 @@ services:
       - .:/app
       - uploads_data:/app/uploads           # 圖片上傳存放區
     working_dir: /app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers
     env_file:
       - .env                                # 敏感資訊從 .env 讀 (請複製 .env.example)
     environment:
@@ -28,7 +28,6 @@ services:
       - DB_PORT=5432
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - DEBUG=true
     depends_on:
       db:
         condition: service_healthy

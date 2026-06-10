@@ -139,7 +139,8 @@ docker compose run --rm -e DEBUG=true -e JWT_SECRET_KEY=pytest-ci-secret-key api
 
 1. 在 Cloudflare Zero Trust 建立 Tunnel，複製 token 到 `.env` 的 `CLOUDFLARE_TUNNEL_TOKEN`
 2. Public Hostname 指向 **`http://api:8000`**（不是 localhost）
-3. 啟動：`docker compose --profile tunnel up -d`
+3. 正式環境啟動：`docker compose -f docker-compose.prod.yml --profile tunnel up -d --build`
+   （本機開發仍用 `docker compose up --build`）
 
 ---
 
