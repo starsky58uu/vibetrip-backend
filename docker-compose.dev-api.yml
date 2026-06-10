@@ -1,0 +1,36 @@
+# 本機開發用 API — 與 prod 並存，走 :8001，不影響 tunnel 的 :8000
+#
+# 前提：prod stack 已跑（db / redis / api / cloudflared）
+# 啟動 dev API：
+#   docker compose -f docker-compose.prod.yml -f docker-compose.dev-api.yml up api-dev -d --build
+# 停止 dev API：
+#   docker compose -f docker-compose.prod.yml -f docker-compose.dev-api.yml stop api-dev
+
+services:
+  api-dev:
+    build: .
+    profiles:
+      - dev
+    ports:
+      # 綁所有介面，同 WiFi 的手機才能連；仍不經 tunnel，外網連不到
+      - "8001:8000"
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads
+    working_dir: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers
+    env_file:
+      - .env
+      - .env.development
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend

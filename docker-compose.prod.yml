@@ -1,10 +1,10 @@
-# 正式環境 — 無 --reload、不掛原始碼、不對外暴露 DB/Redis port
+# 正式環境 — 無 --reload、不掛原始碼
+# DB/Redis 僅綁 127.0.0.1，方便本機 dev API / uvicorn 連線，不對外網開 port
 #
 # 啟動：
 #   docker compose -f docker-compose.prod.yml --profile tunnel up -d --build
 #
-# 若 DB 密碼有變更且舊 volume 連不上，需先：
-#   docker compose -f docker-compose.prod.yml down -v
+# 同一台機器邊開發邊當 prod → docs/DEV_AND_PROD.md
 
 services:
   api:
@@ -38,6 +38,8 @@ services:
       POSTGRES_DB: ${DB_NAME:-tdx_database}
     volumes:
       - pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tdx_user} -d ${DB_NAME:-tdx_database}"]
       interval: 5s
@@ -52,6 +54,8 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

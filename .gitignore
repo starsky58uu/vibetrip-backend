@@ -12,9 +12,11 @@ ENV/
 
 # --- 環境變數與機密檔案 ---
 .env
+.env.development
 *.pem
 *.key
 !.env.example  # 驚嘆號代表「不要忽略」，確保範例檔能上傳方便協作
+!.env.development.example
 
 # --- Docker 與資料庫暫存 ---
 .dockerignore

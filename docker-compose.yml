@@ -1,9 +1,7 @@
-# VibeTrip 後端服務組合
+# VibeTrip 後端服務組合（本機全開發模式）
 #
-# 三個 service 各司其職：
-# - api   → FastAPI (業務邏輯，所有請求入口)
-# - db    → PostgreSQL + PostGIS (靜態資料：帳號、站牌座標、足跡)
-# - redis → Redis (動態資料：即時到站、車輛數、外部 API 快取)
+# ⚠️  與 prod 衝突：會佔用 :8000。若 prod stack 已在跑，請改看 docs/DEV_AND_PROD.md
+#     用 docker-compose.dev-api.yml 在 :8001 開 dev API，不要跑這份 compose 的 api。
 
 services:
   # ==========================================
